@@ -1,0 +1,24 @@
+import { ApiProperty } from '@nestjs/swagger';
+
+export class CreatePaymentDto {
+  @ApiProperty({ example: 1 })
+  student_id: number;
+
+  @ApiProperty({ example: 1 })
+  group_id: number;
+
+  @ApiProperty({ example: 200000 })
+  amount: number;
+
+  @ApiProperty({ example: 5 })
+  month: number;
+
+  @ApiProperty({ example: 2026 })
+  year: number;
+
+  @ApiProperty({ required: false, example: 'To\'lov qilindi' })
+  note?: string;
+
+  @ApiProperty({ required: false, example: 'paid' })
+  status?: 'paid' | 'unpaid' | 'partial';
+}

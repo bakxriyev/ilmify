@@ -1,0 +1,1 @@
+export * from './exercises_result.entity'

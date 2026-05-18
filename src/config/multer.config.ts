@@ -21,13 +21,14 @@ const getDestination = (req: any, file: any, cb: any) => {
   let folder = 'uploads/'; // asosiy papka
 
   // So‘rov yo‘lidan kelib chiqib papkani aniqlash
-  if (req.route?.path?.includes('students')) {
+  const url = req.route?.path || req.originalUrl || req.url || '';
+  if (url.includes('students')) {
     folder += 'students';
-  } else if (req.route?.path?.includes('teachers')) {
+  } else if (url.includes('teachers')) {
     folder += 'teachers';
-  } else if (req.route?.path?.includes('groups')) {
+  } else if (url.includes('groups')) {
     folder += 'groups';
-  } else if (req.route?.path?.includes('education-centers') || req.route?.path?.includes('centers')) {
+  } else if (url.includes('education-centers') || url.includes('centers')) {
     folder += 'centers';
   } else {
     folder += 'others';

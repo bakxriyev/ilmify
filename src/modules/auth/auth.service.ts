@@ -20,6 +20,7 @@ import { LoginResponse } from './dto/loginResponce';
 import { GroupModel } from '../groups/model/group.entity';
 import { TeacherModel } from '../teachers/model/teacher.model';
 import { LevelModel } from '../level/model/level.entity';
+import { EducationCenterModel } from '../education-centers/entities/education-center.entity';
 
 @Injectable()
 export class AuthService {
@@ -62,7 +63,8 @@ export class AuthService {
           { model: TeacherModel, as: 'supportTeacher', attributes: { exclude: ['password'] } },
           { model: LevelModel, as: 'level' }
         ]
-      }
+      },
+      { model: EducationCenterModel }
     ],
     attributes: { exclude: ['password'] } // isActive bu yerda bor
   });
@@ -205,6 +207,15 @@ export class AuthService {
         mainTeacher: student.group.mainTeacher,
         supportTeacher: student.group.supportTeacher,
         level: student.group.level
+      } : null,
+      center_id: (student as any).center_id,
+      center: (student as any).center ? {
+        id: (student as any).center.id,
+        name: (student as any).center.name,
+        logo: (student as any).center.logo,
+        location: (student as any).center.location,
+        phone: (student as any).center.phone,
+        is_active: (student as any).center.is_active,
       } : null,
     }
   };

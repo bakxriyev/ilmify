@@ -204,6 +204,7 @@ export class AuthService {
         teacher_id: student.group.teacher_id,
         support_teacher_id: student.group.support_teacher_id,
         level_id: student.group.level_id,
+        center_id: (student.group as any).center_id,
         mainTeacher: student.group.mainTeacher,
         supportTeacher: student.group.supportTeacher,
         level: student.group.level

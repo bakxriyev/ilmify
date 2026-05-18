@@ -1,5 +1,8 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseInterceptors, UploadedFile, Req, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname, join } from 'path';
+import { existsSync, mkdirSync } from 'fs';
 import { ApiTags, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { EducationCenterService } from './education-center.service';
 import { CreateEducationCenterDto } from './dto/create-education-center.dto';
@@ -64,7 +67,27 @@ export class EducationCenterController {
   @ApiOperation({ summary: 'Markaz logotipini yuklash' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({ schema: { type: 'object', properties: { logo: { type: 'string', format: 'binary' } } } })
-  @UseInterceptors(FileInterceptor('logo', multerOptions))
+  @UseInterceptors(FileInterceptor('logo', {
+    storage: diskStorage({
+      destination: (_req: any, _file: any, cb: any) => {
+        const folder = 'uploads/centers';
+        if (!existsSync(folder)) mkdirSync(folder, { recursive: true });
+        cb(null, folder);
+      },
+      filename: (_req: any, file: any, cb: any) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+        cb(null, `logo-${uniqueSuffix}${extname(file.originalname)}`);
+      },
+    }),
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (_req: any, file: any, cb: any) => {
+      if (['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new NotFoundException('Fayl formati qo‘llab-quvvatlanmaydi'), false);
+      }
+    },
+  }))
   async uploadLogo(@Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
     if (!file) throw new NotFoundException('Fayl yuklanmadi');
     return this.service.updateLogo(Number(id), file.filename);

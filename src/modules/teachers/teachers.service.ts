@@ -10,6 +10,7 @@ import { GroupStudentModel } from '../group_student_model';
 import { RoomModel } from '../rooms/entities/room.entity';
 import { UserDeviceModel } from '../user_device/entities/user_device.entity';
 import { GroupLessonModel } from '../group-lesson/entities/group-lesson.entity';
+import { EducationCenterModel } from '../education-centers/entities/education-center.entity';
 import { CreateTeacherDto, UpdateTeacherDto } from './dto';
 
 @Injectable()
@@ -172,6 +173,7 @@ export class TeacherService {
   async login(phone_number: string, password: string) {
   const teacher = await this.teacherModel.findOne({
     where: { phone_number },
+    include: [{ model: EducationCenterModel }],
   });
 
   if (!teacher) {
@@ -183,6 +185,9 @@ export class TeacherService {
   if (!isMatch) {
     throw new ConflictException('Password incorrect');
   }
+
+  const teacherJson = teacher.toJSON() as any;
+  const center = teacherJson.center;
 
   const access_token = jwt.sign(
     {
@@ -205,6 +210,15 @@ export class TeacherService {
       gmail: teacher.gmail,
       photo: teacher.photo,
       teacher_type: teacher.teacher_type,
+      center_id: teacher.center_id,
+      center: center ? {
+        id: center.id,
+        name: center.name,
+        logo: center.logo,
+        location: center.location,
+        phone: center.phone,
+        is_active: center.is_active,
+      } : null,
     },
   };
 }

@@ -240,6 +240,13 @@ export class EducationCenterService implements OnModuleInit {
     return center.tariff.student_max;
   }
 
+  async updateLogo(id: number, filename: string | null) {
+    const center = await this.centerModel.findByPk(id);
+    if (!center) throw new NotFoundException('Markaz topilmadi');
+    await center.update({ logo: filename });
+    return this.findOne(id);
+  }
+
   async checkStudentLimit(centerId: number): Promise<void> {
     const limit = await this.getStudentLimit(centerId);
     const count = await this.studentModel.count({ where: { center_id: centerId } });

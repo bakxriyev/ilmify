@@ -27,6 +27,8 @@ const getDestination = (req: any, file: any, cb: any) => {
     folder += 'teachers';
   } else if (req.route?.path?.includes('groups')) {
     folder += 'groups';
+  } else if (req.route?.path?.includes('education-centers') || req.route?.path?.includes('centers')) {
+    folder += 'centers';
   } else {
     folder += 'others';
   }

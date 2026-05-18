@@ -1,8 +1,10 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, Req, ForbiddenException, NotFoundException } from '@nestjs/common';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseInterceptors, UploadedFile, Req, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { EducationCenterService } from './education-center.service';
 import { CreateEducationCenterDto } from './dto/create-education-center.dto';
 import { UpdateEducationCenterDto } from './dto/update-education-center.dto';
+import { multerOptions } from '../../config/multer.config';
 
 @ApiTags('Education Centers')
 @Controller('education-centers')
@@ -56,6 +58,22 @@ export class EducationCenterController {
   @ApiOperation({ summary: 'Filialni o\'chirish' })
   removeBranch(@Param('branchId') branchId: string) {
     return this.service.removeBranch(Number(branchId));
+  }
+
+  @Post(':id/logo')
+  @ApiOperation({ summary: 'Markaz logotipini yuklash' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ schema: { type: 'object', properties: { logo: { type: 'string', format: 'binary' } } } })
+  @UseInterceptors(FileInterceptor('logo', multerOptions))
+  async uploadLogo(@Param('id') id: string, @UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new NotFoundException('Fayl yuklanmadi');
+    return this.service.updateLogo(Number(id), file.filename);
+  }
+
+  @Delete(':id/logo')
+  @ApiOperation({ summary: 'Markaz logotipini ochirish' })
+  async removeLogo(@Param('id') id: string) {
+    return this.service.updateLogo(Number(id), null);
   }
 
   @Get(':id')

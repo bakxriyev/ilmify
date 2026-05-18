@@ -3,8 +3,10 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
+import { Sequelize } from 'sequelize-typescript';
 import { Op } from 'sequelize';
 import { StudentModel } from './model/student.entity';
 import { GroupModel } from '../groups/model/group.entity';
@@ -20,6 +22,8 @@ import { GroupLessonModel } from '../group-lesson/entities/group-lesson.entity';
 import { StudentCoinsModel } from '../student-coins/entities/student-coin.entity';
 import { ParentModel } from '../parents/entities/parent.entity';
 import { ParentStudentModel } from '../parents/entities/parent-student.entity';
+import { EducationCenterModel } from '../education-centers/entities/education-center.entity';
+import { TariffModel } from '../tariffs/entities/tariff.entity';
 import {
   CreateStudentDto,
   UpdateStudentDto,
@@ -40,7 +44,36 @@ export class StudentService {
 
     @InjectModel(ParentStudentModel)
     private parentStudentModel: typeof ParentStudentModel,
+
+    @InjectModel(EducationCenterModel)
+    private educationCenterModel: typeof EducationCenterModel,
+
+    @InjectModel(TariffModel)
+    private tariffModel: typeof TariffModel,
   ) {}
+
+  private async checkStudentLimit(center_id: number) {
+    if (!center_id) return;
+    const center = await this.educationCenterModel.findByPk(center_id, {
+      include: [{ model: this.tariffModel }],
+    });
+    if (!center) return;
+    if (center.tariff) {
+      const count = await this.studentModel.count({ where: { center_id } });
+      if (count >= center.tariff.student_max) {
+        throw new ForbiddenException(
+          `Talabalar soni chegarasiga yetdingiz (maksimal: ${center.tariff.student_max}). Tarifni yangilang.`,
+        );
+      }
+    } else {
+      const count = await this.studentModel.count({ where: { center_id } });
+      if (count >= 100) {
+        throw new ForbiddenException(
+          'Sinov rejimida maksimal 100 talaba. Tarif tanlang.',
+        );
+      }
+    }
+  }
 
   // ================= CREATE =================
   async create(createDto: CreateStudentDto, center_id?: number) {
@@ -58,6 +91,10 @@ export class StudentService {
         throw new ConflictException('Bu telefon nomer bilan student allaqachon mavjud');
       if (existingStudent.email === createDto.email)
         throw new ConflictException('Bu email bilan student allaqachon mavjud');
+    }
+
+    if (center_id) {
+      await this.checkStudentLimit(center_id);
     }
 
     const { parent_first_name, parent_last_name, parent_phone_number, parent_password, ...studentData } = createDto;

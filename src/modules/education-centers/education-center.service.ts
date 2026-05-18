@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException, ConflictException, OnModuleInit } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, ForbiddenException, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { EducationCenterModel } from './entities/education-center.entity';
 import { CenterBranchModel } from './entities/center-branch.entity';
+import { TariffModel } from '../tariffs/entities/tariff.entity';
 import { AdminModel } from '../admin/model/admin.entity';
 import { StudentModel } from '../students/model/student.entity';
 import { TeacherModel } from '../teachers/model/teacher.model';
@@ -10,12 +11,14 @@ import { GroupModel } from '../groups/model/group.entity';
 import { CreateEducationCenterDto } from './dto/create-education-center.dto';
 import { UpdateEducationCenterDto } from './dto/update-education-center.dto';
 import * as bcrypt from 'bcrypt';
+import { Op } from 'sequelize';
 
 @Injectable()
 export class EducationCenterService implements OnModuleInit {
   constructor(
     @InjectModel(EducationCenterModel) private centerModel: typeof EducationCenterModel,
     @InjectModel(CenterBranchModel) private branchModel: typeof CenterBranchModel,
+    @InjectModel(TariffModel) private tariffModel: typeof TariffModel,
     @InjectModel(AdminModel) private adminModel: typeof AdminModel,
     @InjectModel(StudentModel) private studentModel: typeof StudentModel,
     @InjectModel(TeacherModel) private teacherModel: typeof TeacherModel,
@@ -39,12 +42,24 @@ export class EducationCenterService implements OnModuleInit {
     const existing = await this.centerModel.findOne({ where: { name: dto.name } });
     if (existing) throw new ConflictException('Bunday nomli markaz mavjud');
 
+    let tariff = null;
+    if (dto.tariff_id) {
+      tariff = await this.tariffModel.findByPk(dto.tariff_id);
+      if (!tariff) throw new NotFoundException('Tarif topilmadi');
+    }
+
+    const trial_ends_at = new Date();
+    trial_ends_at.setDate(trial_ends_at.getDate() + 7);
+
     const center = await this.centerModel.create({
       name: dto.name,
       location: dto.location,
       phone: dto.phone,
-      balance: dto.balance || 0,
       is_active: dto.is_active ?? true,
+      tariff_id: dto.tariff_id || null,
+      trial_ends_at,
+      call_center_enabled: false,
+      features: {},
     });
 
     if (dto.admin) {
@@ -65,7 +80,10 @@ export class EducationCenterService implements OnModuleInit {
   async findAll() {
     const centers = await this.centerModel.findAll({
       order: [['created_at', 'DESC']],
-      include: [{ model: CenterBranchModel, as: 'branches' }],
+      include: [
+        { model: CenterBranchModel, as: 'branches' },
+        { model: TariffModel },
+      ],
     });
 
     const result = [];
@@ -87,7 +105,10 @@ export class EducationCenterService implements OnModuleInit {
 
   async findOne(id: number) {
     const center = await this.centerModel.findByPk(id, {
-      include: [{ model: CenterBranchModel, as: 'branches' }],
+      include: [
+        { model: CenterBranchModel, as: 'branches' },
+        { model: TariffModel },
+      ],
     });
     if (!center) throw new NotFoundException('Markaz topilmadi');
 
@@ -125,7 +146,7 @@ export class EducationCenterService implements OnModuleInit {
 
   async getStats() {
     const [centers, totalStudents, totalTeachers, totalParents, totalGroups] = await Promise.all([
-      this.centerModel.findAll(),
+      this.centerModel.findAll({ include: [{ model: TariffModel }] }),
       this.studentModel.count(),
       this.teacherModel.count(),
       this.parentModel.count(),
@@ -142,7 +163,12 @@ export class EducationCenterService implements OnModuleInit {
         this.teacherModel.count({ where: { center_id: c.id } }),
         this.groupModel.count({ where: { center_id: c.id } }),
       ]);
-      return { id: c.id, name: c.name, students: s, teachers: t, groups: g, is_active: c.is_active };
+      return {
+        id: c.id, name: c.name, students: s, teachers: t, groups: g, is_active: c.is_active,
+        tariff: c.tariff ? { id: c.tariff.id, name: c.tariff.name } : null,
+        trial_ends_at: c.trial_ends_at,
+        tariff_ends_at: c.tariff_ends_at,
+      };
     }));
 
     return {
@@ -186,10 +212,39 @@ export class EducationCenterService implements OnModuleInit {
 
   async isCenterActive(centerId: number): Promise<boolean> {
     try {
-      const center = await this.centerModel.findByPk(centerId, { attributes: ['is_active'] });
-      return center?.is_active === true;
+      const center = await this.centerModel.findByPk(centerId, { attributes: ['is_active', 'trial_ends_at'] });
+      if (!center) return false;
+      if (!center.is_active) return false;
+      return true;
     } catch {
       return true;
+    }
+  }
+
+  async checkAndEnforceTrial(centerId: number): Promise<void> {
+    const center = await this.centerModel.findByPk(centerId);
+    if (!center) return;
+    if (!center.is_active) return;
+    if (center.trial_ends_at && new Date() > new Date(center.trial_ends_at)) {
+      if (!center.tariff_id) {
+        await center.update({ is_active: false });
+      }
+    }
+  }
+
+  async getStudentLimit(centerId: number): Promise<number> {
+    const center = await this.centerModel.findByPk(centerId, {
+      include: [{ model: TariffModel }],
+    });
+    if (!center || !center.tariff) return 100;
+    return center.tariff.student_max;
+  }
+
+  async checkStudentLimit(centerId: number): Promise<void> {
+    const limit = await this.getStudentLimit(centerId);
+    const count = await this.studentModel.count({ where: { center_id: centerId } });
+    if (count >= limit) {
+      throw new ForbiddenException(`Talabalar soni cheklangan (maks: ${limit})`);
     }
   }
 }

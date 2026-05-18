@@ -5,6 +5,7 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { AdminModel, AdminRole } from './model/admin.entity';
 import { EducationCenterModel } from '../education-centers/entities/education-center.entity';
+import { EducationCenterService } from '../education-centers/education-center.service';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { UpdateAdminDto } from './dto/update-admin.dto';
 import { PhoneLoginDto } from './dto/login-admin.dto';
@@ -16,6 +17,7 @@ export class AdminService {
     @InjectModel(AdminModel)
     private adminModel: typeof AdminModel,
     private jwtService: JwtService,
+    private educationCenterService: EducationCenterService,
   ) {}
 
   // Barcha adminlarni olish
@@ -177,6 +179,13 @@ export class AdminService {
     if (admin.role !== AdminRole.SUPER_ADMIN) {
       if (!center) throw new ForbiddenException('Siz hech qanday o\'quv markaziga biriktirilmagansiz');
       if (!center.is_active) throw new ForbiddenException('O\'quv markazi faol emas');
+
+      // Trial muddatini tekshirish
+      await this.educationCenterService.checkAndEnforceTrial(center.id);
+
+      // Qayta tekshirish (trial tugagan bo'lsa is_active false bo'ladi)
+      const updatedCenter = await EducationCenterModel.findByPk(center.id, { attributes: ['is_active'] });
+      if (!updatedCenter?.is_active) throw new ForbiddenException('Markaz vaqtincha bloklangan. Tarifni yangilang.');
     }
 
     // Tokenlarni generatsiya qilish

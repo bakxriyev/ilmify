@@ -6,9 +6,12 @@ import { StudentController } from './students.controller';
 import { StudentModel } from './model/student.entity';
 import { ParentModel } from '../parents/entities/parent.entity';
 import { ParentStudentModel } from '../parents/entities/parent-student.entity';
+import { EducationCenterModel } from '../education-centers/entities/education-center.entity';
+import { TariffModel } from '../tariffs/entities/tariff.entity';
+
 @Module({
   imports: [
-    SequelizeModule.forFeature([StudentModel, ParentModel, ParentStudentModel]),
+    SequelizeModule.forFeature([StudentModel, ParentModel, ParentStudentModel, EducationCenterModel, TariffModel]),
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'secret123',
       signOptions: { expiresIn: '1d' },

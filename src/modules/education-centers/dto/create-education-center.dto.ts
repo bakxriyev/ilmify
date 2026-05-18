@@ -1,28 +1,28 @@
 import { IsString, IsNotEmpty, IsOptional, IsNumber, IsBoolean } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateEducationCenterDto {
-  @ApiProperty({ example: 'ILM O\'quv Markazi' })
+  @ApiProperty({ example: "ILM O'quv Markazi" })
   @IsString() @IsNotEmpty()
   name: string;
 
-  @ApiProperty({ example: 'Toshkent, Chilonzor', required: false })
+  @ApiPropertyOptional({ example: 'Toshkent, Chilonzor' })
   @IsString() @IsOptional()
   location?: string;
 
-  @ApiProperty({ example: '+998901234567', required: false })
+  @ApiPropertyOptional({ example: '+998901234567' })
   @IsString() @IsOptional()
   phone?: string;
 
-  @ApiProperty({ example: 0, required: false })
-  @IsNumber() @IsOptional()
-  balance?: number;
-
-  @ApiProperty({ example: true, required: false })
+  @ApiPropertyOptional({ example: true })
   @IsBoolean() @IsOptional()
   is_active?: boolean;
 
-  @ApiProperty({ required: false })
+  @ApiPropertyOptional({ example: 1 })
+  @IsNumber() @IsOptional()
+  tariff_id?: number;
+
+  @ApiPropertyOptional()
   @IsOptional()
   admin?: {
     first_name: string;

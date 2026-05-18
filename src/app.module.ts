@@ -63,6 +63,8 @@ import { LeadSourceModel } from './modules/lead-sources/entities/lead-source.ent
 import { EducationCenterModule } from './modules/education-centers/education-center.module';
 import { EducationCenterModel } from './modules/education-centers/entities/education-center.entity';
 import { CenterBranchModel } from './modules/education-centers/entities/center-branch.entity';
+import { TariffModule } from './modules/tariffs/tariff.module';
+import { TariffModel } from './modules/tariffs/entities/tariff.entity';
 
 @Module({
   imports: [
@@ -87,7 +89,7 @@ import { CenterBranchModel } from './modules/education-centers/entities/center-b
             username: config.get<string>('databaseConfig.user'),
             password: config.get<string>('databaseConfig.password'),
             database: config.get<string>('databaseConfig.dbname'),
-            models: [TeacherModel,LevelModel,AdminModel,UserDeviceModel,GroupLessonModel,RedoIncorrectTaskModel, StudentModel,GroupModel,GroupStudentModel,AttendanceModel,UnitModel,ExerciseModel,TaskModel,StudentAnswerModel,ExerciseResultModel,VocabModel,VocabAnswerModel,VocabResultModel,UnitResultModel,StudentCoinsModel,TeacherCoinLogModel,TaskCoinLogModel,ChatRoomModel,ChatMessageModel,MessageStatusModel,ParentModel,ParentStudentModel,RoomModel,PaymentModel,EducationCenterModel,CenterBranchModel,LeadModel,LeadSourceModel],
+            models: [TariffModel, TeacherModel,LevelModel,AdminModel,UserDeviceModel,GroupLessonModel,RedoIncorrectTaskModel, StudentModel,GroupModel,GroupStudentModel,AttendanceModel,UnitModel,ExerciseModel,TaskModel,StudentAnswerModel,ExerciseResultModel,VocabModel,VocabAnswerModel,VocabResultModel,UnitResultModel,StudentCoinsModel,TeacherCoinLogModel,TaskCoinLogModel,ChatRoomModel,ChatMessageModel,MessageStatusModel,ParentModel,ParentStudentModel,RoomModel,PaymentModel,EducationCenterModel,CenterBranchModel,LeadModel,LeadSourceModel],
             sync: { alter: true },
             synchronize: true,
             logging: console.log,
@@ -135,6 +137,7 @@ import { CenterBranchModel } from './modules/education-centers/entities/center-b
     PaymentModule,
     LeadModule,
     LeadSourceModule,
+    TariffModule,
     EducationCenterModule,
   ],
   controllers: [

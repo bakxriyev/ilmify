@@ -15,6 +15,7 @@ import { GroupStudentModel } from 'src/modules/group_student_model';
 import { AttendanceModel } from '../../attendence/model/attendence.entity';
 import { GroupLessonModel } from '../../group-lesson/entities/group-lesson.entity';
 import { EducationCenterModel } from '../../education-centers/entities/education-center.entity';
+import { RoomModel } from '../../rooms/entities/room.entity';
 
 @Table({ 
   tableName: 'groups', 
@@ -41,6 +42,7 @@ export class GroupModel extends Model {
   @Column({ type: DataType.BIGINT, allowNull: true })
   level_id: number;
 
+  @ForeignKey(() => RoomModel)
   @Column({ type: DataType.BIGINT, allowNull: true })
   room_id: number;
 
@@ -69,6 +71,10 @@ export class GroupModel extends Model {
   // Level relation
   @BelongsTo(() => LevelModel, { foreignKey: 'level_id', as: 'level' })
   level: LevelModel;
+
+  // Room relation
+  @BelongsTo(() => RoomModel, { foreignKey: 'room_id', as: 'room' })
+  room: RoomModel;
 
   // Other relations
   @HasMany(() => GroupStudentModel, { foreignKey: 'group_id', as: 'groupStudents',onDelete: 'CASCADE' })

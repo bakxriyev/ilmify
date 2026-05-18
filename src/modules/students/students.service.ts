@@ -253,6 +253,7 @@ export class StudentService {
       ? [
         {
   model: StudentCoinsModel,
+  as: 'coins',
   attributes: ['coins', 'scores'],
   required: false,
 },

@@ -57,7 +57,7 @@ export async function deviceAuthMiddleware(
 
     if (!session) {
       return res.status(401).json({
-        message: 'Session expired or logged in from another device. Please login again.',
+        message: 'Session expired or logged in from another device. Please login again please.',
       });
     }
 

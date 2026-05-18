@@ -114,7 +114,7 @@ bulkAddStudents(
 ) {
   return this.groupStudentService.bulkAddStudentsToGroup(
     groupId,
-    dto.studentIds,
+    dto.student_ids,
     dto.joined_date
   );
 }

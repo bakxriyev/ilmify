@@ -9,12 +9,12 @@ export class BulkAddStudentsDto {
   @IsArray()
   @ArrayNotEmpty()
   @IsNumber({}, { each: true })
-  studentIds: number[];
+  student_ids: number[];
 
    @ApiProperty({
     example: "2026-02-17",
     description: 'Data',
   })
   @IsString()
-  joined_date:string
+  joined_date: string;
 }

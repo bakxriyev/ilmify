@@ -41,6 +41,11 @@ async function bootstrap() {
     methods: ['POST', 'GET', 'PATCH', 'DELETE', 'PUT'],
   });
 
+  // Katta fayllar yuklash uchun body parser limitini oshirish
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+  app.use(express.raw({ limit: '50mb' }));
+
   // uploads papkasini public qilish
   app.use('/uploads', express.static(join(process.cwd(), 'uploads')));
 

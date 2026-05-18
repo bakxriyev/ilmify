@@ -79,7 +79,7 @@ export class EducationCenterController {
         cb(null, `logo-${uniqueSuffix}${extname(file.originalname)}`);
       },
     }),
-    limits: { fileSize: 10 * 1024 * 1024 },
+    limits: { fileSize: 50 * 1024 * 1024 },
     fileFilter: (_req: any, file: any, cb: any) => {
       if (['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(file.mimetype)) {
         cb(null, true);

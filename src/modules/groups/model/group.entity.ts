@@ -47,6 +47,9 @@ export class GroupModel extends Model {
   @Column({ type: DataType.DECIMAL(10, 2), allowNull: true, defaultValue: 0 })
   monthly_price: number;
 
+  @Column({ type: DataType.DECIMAL(4, 2), allowNull: true, defaultValue: 1.00 })
+  kp: number;
+
   // ✅ Timestamp columns (explicit definition is optional, but recommended)
   @CreatedAt
   @Column({ type: DataType.DATE, allowNull: false, defaultValue: DataType.NOW })

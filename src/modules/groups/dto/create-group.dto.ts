@@ -62,4 +62,9 @@ export class CreateGroupDto {
   @IsOptional()
   @IsNumber()
   monthly_price?: number;
+
+  @ApiProperty({ description: 'KP (koeffitsient)', example: 1.0, required: false })
+  @IsOptional()
+  @IsNumber()
+  kp?: number;
 }

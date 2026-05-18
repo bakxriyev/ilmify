@@ -30,7 +30,7 @@ export async function deviceAuthMiddleware(
 ) {
   const authHeader = req.headers.authorization;
   if (!authHeader?.startsWith('Bearer ')) {
-    return res.status(401).json({ message: 'No token provided error' });
+    return res.status(401).json({ message: 'No token provided errors' });
   }
 
   const token = authHeader.split(' ')[1];

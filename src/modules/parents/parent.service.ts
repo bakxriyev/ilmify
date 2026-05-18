@@ -5,6 +5,8 @@ import { ParentModel } from './entities/parent.entity';
 import { ParentStudentModel } from './entities/parent-student.entity';
 import { StudentModel } from '../students/model/student.entity';
 import { GroupModel } from '../groups/model/group.entity';
+import { TeacherModel } from '../teachers/model/teacher.model';
+import { LevelModel } from '../level/model/level.entity';
 import { GroupStudentModel } from '../group_student_model';
 import { ChatRoomModel, ChatRoomType } from '../chat/entities/chat-room.entity';
 import * as jwt from 'jsonwebtoken';
@@ -95,11 +97,25 @@ export class ParentService {
           model: StudentModel,
           as: 'student',
           include: [
-            { model: GroupModel, attributes: ['id', 'name'] },
+            {
+              model: GroupModel,
+              include: [
+                { model: TeacherModel, as: 'mainTeacher' },
+                { model: TeacherModel, as: 'supportTeacher' },
+                { model: LevelModel, as: 'level' },
+              ],
+            },
             {
               model: GroupStudentModel,
               as: 'group_students',
-              include: [{ model: GroupModel, attributes: ['id', 'name'] }],
+              include: [{
+                model: GroupModel,
+                include: [
+                  { model: TeacherModel, as: 'mainTeacher' },
+                  { model: TeacherModel, as: 'supportTeacher' },
+                  { model: LevelModel, as: 'level' },
+                ],
+              }],
             },
           ],
         },

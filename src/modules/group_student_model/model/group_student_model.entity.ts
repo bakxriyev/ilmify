@@ -17,10 +17,16 @@ export class GroupStudentModel extends Model {
 
   @Column({ type: DataType.DATE, allowNull: false })
   joined_date: Date;
-  
-@BelongsTo(() => GroupModel, { as: 'group',onDelete: 'CASCADE' })
-group: GroupModel;
 
-@BelongsTo(() => StudentModel, { as: 'student' })
-student: StudentModel;
+  @Column({ type: DataType.DATE, allowNull: true })
+  left_date: Date;
+
+  @Column({ type: DataType.BOOLEAN, defaultValue: false })
+  is_trial: boolean;
+
+  @BelongsTo(() => GroupModel, { as: 'group', onDelete: 'CASCADE' })
+  group: GroupModel;
+
+  @BelongsTo(() => StudentModel, { as: 'student' })
+  student: StudentModel;
 }

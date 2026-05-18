@@ -7,6 +7,7 @@ export enum LeadStatus {
   CONTACTED = 'contacted',
   INTERESTED = 'interested',
   NOT_INTERESTED = 'not_interested',
+  TRIAL_REGISTERED = 'trial_registered',
   ENROLLED = 'enrolled',
   ARCHIVED = 'archived',
 }
@@ -50,6 +51,12 @@ export class LeadModel extends Model {
 
   @Column({ type: DataType.DATE, allowNull: true })
   contacted_at: Date;
+
+  @Column({ type: DataType.BIGINT, allowNull: true })
+  trial_group_id: number;
+
+  @Column({ type: DataType.BIGINT, allowNull: true })
+  student_id: number;
 
   @CreatedAt
   created_at: Date;

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, Req, ForbiddenException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, Req, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { EducationCenterService } from './education-center.service';
 import { CreateEducationCenterDto } from './dto/create-education-center.dto';
@@ -37,6 +37,27 @@ export class EducationCenterController {
     return this.service.getStats();
   }
 
+  @Get('my-public-token')
+  @ApiOperation({ summary: 'Joriy adminning markaz tokenini qaytarish' })
+  async getMyPublicToken(@Req() req?: any) {
+    const centerId = req?.center_id || req?.headers?.['x-center-id'];
+    if (!centerId) throw new NotFoundException('Markaz topilmadi');
+    const token = await this.service.getOrCreatePublicToken(Number(centerId));
+    return { token };
+  }
+
+  @Get('by-token/:token')
+  @ApiOperation({ summary: 'Token orqali markazni topish (public)' })
+  findByToken(@Param('token') token: string) {
+    return this.service.findByToken(token);
+  }
+
+  @Delete('branches/:branchId')
+  @ApiOperation({ summary: 'Filialni o\'chirish' })
+  removeBranch(@Param('branchId') branchId: string) {
+    return this.service.removeBranch(Number(branchId));
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Markaz ma\'lumotlari' })
   findOne(@Param('id') id: string) {
@@ -65,11 +86,5 @@ export class EducationCenterController {
   @ApiOperation({ summary: 'Filiallar ro\'yxati' })
   getBranches(@Param('id') id: string) {
     return this.service.getBranches(Number(id));
-  }
-
-  @Delete('branches/:branchId')
-  @ApiOperation({ summary: 'Filialni o\'chirish' })
-  removeBranch(@Param('branchId') branchId: string) {
-    return this.service.removeBranch(Number(branchId));
   }
 }

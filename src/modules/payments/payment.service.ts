@@ -5,6 +5,7 @@ import { PaymentModel, PaymentStatus } from './entities/payment.entity';
 import { StudentModel } from '../students/model/student.entity';
 import { GroupModel } from '../groups/model/group.entity';
 import { GroupStudentModel } from '../group_student_model';
+import { GroupLessonModel } from '../group-lesson/entities/group-lesson.entity';
 import { ParentStudentModel } from '../parents/entities/parent-student.entity';
 import { ParentModel } from '../parents/entities/parent.entity';
 import { CreatePaymentDto } from './dto/create-payment.dto';
@@ -188,6 +189,38 @@ export class PaymentService {
       sent++;
     }
     return { sent };
+  }
+
+  async checkLessonReminders(groupId: number) {
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const year = now.getFullYear();
+    const startOfMonth = new Date(year, month - 1, 1);
+
+    const lessonCount = await GroupLessonModel.count({
+      where: { group_id: groupId, date: { [Op.gte]: startOfMonth } },
+    });
+
+    if (lessonCount < 3) return { sent: 0, reason: `${lessonCount} ta dars o'tkazilgan, 3 ta bo'lishi kerak` };
+
+    const unpaid = await this.paymentModel.findAll({
+      where: { group_id: groupId, month, year, status: PaymentStatus.UNPAID },
+      include: [{ model: StudentModel, attributes: ['id', 'first_name', 'last_name'] }],
+    });
+
+    let sent = 0;
+    for (const p of unpaid) {
+      const student = p.student as any;
+      if (!student) continue;
+      await this.notificationService.create({
+        userId: Number(student.id),
+        title: "To'lov eslatmasi",
+        description: `Hurmatli ${student.first_name}, guruhda 3 ta dars o'tdi. Iltimos, ${month}-oy uchun to'lovni amalga oshiring!`,
+        link: '/payments',
+      } as any);
+      sent++;
+    }
+    return { sent, total_unpaid: unpaid.length };
   }
 
   async sendAbsenceNotification(studentId: number, lessonDate: string) {

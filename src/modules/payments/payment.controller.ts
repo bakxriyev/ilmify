@@ -88,6 +88,12 @@ export class PaymentController {
     return this.service.remove(Number(id));
   }
 
+  @Post('check-reminders')
+  @ApiOperation({ summary: "3 ta darsdan keyin to'lov eslatmasini yuborish" })
+  checkReminders(@Body() dto: { group_id: number }) {
+    return this.service.checkLessonReminders(dto.group_id);
+  }
+
   @Post('absence-notification')
   @ApiOperation({ summary: 'Darsga kelmaganlik haqida bildirishnoma' })
   sendAbsenceNotification(@Body() dto: { student_id: number; lesson_date: string }) {

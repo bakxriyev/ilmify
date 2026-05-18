@@ -2,9 +2,9 @@ import { Injectable, NotFoundException, ConflictException } from '@nestjs/common
 import { InjectModel } from '@nestjs/sequelize';
 import { Op } from 'sequelize';
 import { RoomModel } from './entities/room.entity';
+import { GroupLessonModel } from '../group-lesson/entities/group-lesson.entity';
 import { GroupModel } from '../groups/model/group.entity';
 import { GroupStudentModel } from '../group_student_model';
-import { GroupLessonModel } from '../group-lesson/entities/group-lesson.entity';
 import { CreateRoomDto, UpdateRoomDto } from './dto/room.dto';
 
 @Injectable()
@@ -12,6 +12,8 @@ export class RoomService {
   constructor(
     @InjectModel(RoomModel)
     private roomModel: typeof RoomModel,
+    @InjectModel(GroupLessonModel)
+    private groupLessonModel: typeof GroupLessonModel,
     @InjectModel(GroupStudentModel)
     private groupStudentModel: typeof GroupStudentModel,
   ) {}
@@ -22,54 +24,109 @@ export class RoomService {
     if (search) where.name = { [Op.iLike]: `%${search}%` };
     const rooms = await this.roomModel.findAll({
       where,
-      include: [{ model: GroupModel, as: 'groups', attributes: ['id', 'name'] }],
       order: [['name', 'ASC']],
     });
 
     const result = [];
     for (const r of rooms) {
-      const groupsWithCounts = [];
-      for (const g of r.groups || []) {
-        const count = await this.groupStudentModel.count({ where: { group_id: g.id } });
-        groupsWithCounts.push({ id: g.id, name: g.name, student_count: count });
+      // Find distinct groups that have lessons in this room
+      const lessons = await this.groupLessonModel.findAll({
+        where: { room_id: r.id },
+        include: [{
+          model: GroupModel,
+          as: 'group',
+          attributes: ['id', 'name'],
+        }],
+        order: [['date', 'DESC']],
+      });
+
+      const groupMap = new Map<number, { id: number; name: string; student_count: number; trial_count: number; lesson_times: string[] }>();
+      for (const l of lessons) {
+        if (!l.group) continue;
+        if (!groupMap.has(l.group.id)) {
+          const count = await this.groupStudentModel.count({ where: { group_id: l.group.id, is_trial: false } });
+          const trialCount = await this.groupStudentModel.count({ where: { group_id: l.group.id, is_trial: true } });
+          groupMap.set(l.group.id, { id: l.group.id, name: l.group.name, student_count: count, trial_count: trialCount, lesson_times: [] });
+        }
+        const timeStr = `${l.start_time?.slice(0, 5) || l.time?.slice(0, 5)}-${l.end_time?.slice(0, 5) || ''}`;
+        if (!groupMap.get(l.group.id)!.lesson_times.includes(timeStr)) {
+          groupMap.get(l.group.id)!.lesson_times.push(timeStr);
+        }
       }
-      const totalOccupied = groupsWithCounts.reduce((s, g) => s + g.student_count, 0);
+
+      const groupsWithCounts = [];
+      let maxOccupied = 0;
+      for (const [_, g] of groupMap) {
+        const availSeats = r.capacity - g.student_count;
+        if (g.student_count > maxOccupied) maxOccupied = g.student_count;
+        groupsWithCounts.push({
+          id: g.id,
+          name: g.name,
+          student_count: g.student_count,
+          trial_count: g.trial_count,
+          available_seats: availSeats >= 0 ? availSeats : 0,
+          lesson_times: g.lesson_times,
+        });
+      }
+
       result.push({
         ...r.toJSON(),
         groups: groupsWithCounts,
         groups_count: groupsWithCounts.length,
-        occupied_seats: totalOccupied,
-        available_seats: r.capacity - totalOccupied,
+        occupied_seats: maxOccupied,
+        available_seats: r.capacity - maxOccupied,
       });
     }
     return result;
   }
 
   async findOne(id: number) {
-    const room = await this.roomModel.findByPk(id, {
-      include: [{
-        model: GroupModel,
-        as: 'groups',
-        include: [{ model: GroupLessonModel, as: 'lessons', attributes: ['id', 'date', 'time', 'parity'] }],
-      }],
-    });
+    const room = await this.roomModel.findByPk(id);
     if (!room) throw new NotFoundException('Xona topilmadi');
 
     const json = room.toJSON() as any;
+
+    // Get all lessons in this room with group info
+    const lessons = await this.groupLessonModel.findAll({
+      where: { room_id: id },
+      include: [{
+        model: GroupModel,
+        as: 'group',
+        attributes: ['id', 'name'],
+      }],
+      order: [['date', 'DESC']],
+    });
+
+    // Group lessons by group
+    const groupMap = new Map<number, { id: number; name: string; lessons: any[] }>();
+    for (const l of lessons) {
+      if (!l.group) continue;
+      if (!groupMap.has(l.group.id)) {
+        groupMap.set(l.group.id, { id: l.group.id, name: l.group.name, lessons: [] });
+      }
+      const lessonJson = l.toJSON();
+      delete lessonJson.group;
+      groupMap.get(l.group.id)!.lessons.push(lessonJson);
+    }
+
     const groupsWithDetails = [];
-    for (const g of json.groups || []) {
-      const count = await this.groupStudentModel.count({ where: { group_id: g.id } });
-      const lessons = (g.lessons || []).sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
-      const nextLesson = lessons.find((l: any) => new Date(l.date) >= new Date());
+    for (const [groupId, g] of groupMap) {
+      const count = await this.groupStudentModel.count({ where: { group_id: groupId, is_trial: false } });
+      const trialCount = await this.groupStudentModel.count({ where: { group_id: groupId, is_trial: true } });
+      const sortedLessons = g.lessons.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      const nextLesson = sortedLessons.find((l: any) => new Date(l.date) >= new Date());
+
       groupsWithDetails.push({
         id: g.id,
         name: g.name,
         student_count: count,
-        available_seats: json.capacity - count,
-        lessons_count: lessons.length,
+        trial_count: trialCount,
+        available_seats: json.capacity - count >= 0 ? json.capacity - count : 0,
+        lessons_count: g.lessons.length,
         next_lesson_date: nextLesson?.date || null,
-        next_lesson_time: nextLesson?.time?.slice(0, 5) || null,
-        lessons,
+        next_lesson_time: nextLesson?.start_time?.slice(0, 5) || nextLesson?.time?.slice(0, 5) || null,
+        next_lesson_end_time: nextLesson?.end_time?.slice(0, 5) || null,
+        lessons: g.lessons,
       });
     }
 
@@ -87,7 +144,8 @@ export class RoomService {
   }
 
   async update(id: number, dto: UpdateRoomDto) {
-    const room = await this.findOne(id);
+    const room = await this.roomModel.findByPk(id);
+    if (!room) throw new NotFoundException('Xona topilmadi');
     if (dto.name && dto.name !== room.name) {
       const existing = await this.roomModel.findOne({ where: { name: dto.name, id: { [Op.ne]: id } } });
       if (existing) throw new ConflictException('Bu nomli xona allaqachon mavjud');
@@ -97,7 +155,8 @@ export class RoomService {
   }
 
   async remove(id: number) {
-    const room = await this.findOne(id);
+    const room = await this.roomModel.findByPk(id);
+    if (!room) throw new NotFoundException('Xona topilmadi');
     await room.destroy();
     return { message: 'Xona ochirildi' };
   }

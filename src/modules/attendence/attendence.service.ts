@@ -108,7 +108,7 @@ export class AttendanceService {
     });
 
     if (!lessons.length) {
-      throw new NotFoundException('Bu sanada lesson topilmadi');
+      return [];
     }
 
     const lessonIds = lessons.map((l) => l.id);
@@ -120,6 +120,50 @@ export class AttendanceService {
       include: [StudentModel],
       order: [['student_id', 'ASC']],
     });
+  }
+
+  /*
+  OYLIK DAVOMAT GRID (barcha studentlar + barcha darslar)
+  */
+  async monthlyGrid(group_id: number, year: number, month: number) {
+    const start = new Date(Date.UTC(year, month - 1, 1));
+    const end = new Date(Date.UTC(year, month, 1));
+
+    const lessons = await this.lessonRepo.findAll({
+      where: {
+        group_id,
+        date: { [Op.gte]: start, [Op.lt]: end },
+      },
+      order: [['date', 'ASC']],
+      attributes: ['id', 'date', 'start_time', 'end_time'],
+    });
+
+    if (!lessons.length) {
+      return { lessons: [], attendance: [] };
+    }
+
+    const lessonIds = lessons.map((l) => l.id);
+
+    const attendance = await this.attendanceRepo.findAll({
+      where: { lesson_id: lessonIds },
+      attributes: ['id', 'lesson_id', 'student_id', 'is_present', 'reason'],
+    });
+
+    const map: Record<number, Record<number, { is_present: boolean; reason?: string }>> = {};
+    for (const a of attendance) {
+      if (!map[a.lesson_id]) map[a.lesson_id] = {};
+      map[a.lesson_id][a.student_id] = { is_present: a.is_present, reason: a.reason || undefined };
+    }
+
+    return {
+      lessons: lessons.map(l => ({
+        id: l.id,
+        date: l.date,
+        start_time: l.start_time,
+        end_time: l.end_time,
+      })),
+      attendance: map,
+    };
   }
 
   /*

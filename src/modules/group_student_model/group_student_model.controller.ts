@@ -75,6 +75,18 @@ export class GroupStudentController {
     return this.groupStudentService.update(id, updateGroupStudentDto);
   }
 
+  @Get('trial/all')
+  @ApiOperation({ summary: 'Barcha probniy (trial) studentlarni olish' })
+  findAllTrial() {
+    return this.groupStudentService.findAllTrial();
+  }
+
+  @Patch(':id/confirm-trial')
+  @ApiOperation({ summary: 'Probniy studentni to\'liq studentga aylantirish (is_trial=false)' })
+  confirmTrial(@Param('id', ParseIntPipe) id: number) {
+    return this.groupStudentService.confirmTrial(id);
+  }
+
   @Delete(':id')
   @ApiOperation({ summary: 'Remove student from group by relation ID' })
   @ApiResponse({ status: 200, description: 'Student removed from group' })

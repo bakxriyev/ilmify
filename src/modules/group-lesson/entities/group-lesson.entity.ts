@@ -8,6 +8,7 @@ import {
 } from 'sequelize-typescript';
 import { GroupModel } from '../../groups/model/group.entity';
 import { UnitModel } from '../../units/model';
+import { RoomModel } from '../../rooms/entities/room.entity';
 
 @Table({ tableName: 'group_lessons', timestamps: false })
 export class GroupLessonModel extends Model<GroupLessonModel> {
@@ -22,11 +23,21 @@ export class GroupLessonModel extends Model<GroupLessonModel> {
   @Column({ type: DataType.BIGINT, allowNull: true })
   unit_id: number;
 
+  @ForeignKey(() => RoomModel)
+  @Column({ type: DataType.BIGINT, allowNull: true })
+  room_id: number;
+
   @Column({ type: DataType.DATE, allowNull: false })
   date: Date;
 
   @Column({ type: DataType.TIME, allowNull: false })
   time: string;
+
+  @Column({ type: DataType.TIME, allowNull: true })
+  start_time: string;
+
+  @Column({ type: DataType.TIME, allowNull: true })
+  end_time: string;
 
   @Column({ type: DataType.ENUM('odd', 'even'), allowNull: false })
   parity: 'odd' | 'even';
@@ -36,4 +47,7 @@ export class GroupLessonModel extends Model<GroupLessonModel> {
 
   @BelongsTo(() => UnitModel, 'unit_id')
   unit: UnitModel;
+
+  @BelongsTo(() => RoomModel, 'room_id')
+  room: RoomModel;
 }

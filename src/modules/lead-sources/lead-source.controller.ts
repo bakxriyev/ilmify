@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Req, NotFoundException } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { LeadSourceService } from './lead-source.service';
 import { CreateLeadSourceDto, UpdateLeadSourceDto } from './dto/lead-source.dto';
@@ -18,6 +18,23 @@ export class LeadSourceController {
   @ApiOperation({ summary: 'Barcha manbalar' })
   findAll(@Req() req?: any) {
     return this.service.findAll(req?.center_id);
+  }
+
+  @Get('by-code/:code')
+  @ApiOperation({ summary: 'Code orqali manba topish (public, auth kerak emas)' })
+  async findByCode(@Param('code') code: string) {
+    const source = await this.service.findByCode(code);
+    if (!source) throw new NotFoundException('Manba topilmadi');
+    return {
+      id: source.id,
+      name: source.name,
+      platform: source.platform,
+      code: source.code,
+      center: source.center ? {
+        id: source.center.id,
+        name: source.center.name,
+      } : null,
+    };
   }
 
   @Get(':id')

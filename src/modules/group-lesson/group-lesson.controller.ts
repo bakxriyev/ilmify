@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { GroupLessonService } from './group-lesson.service';
 import { ApiTags, ApiOperation, ApiParam, ApiBody } from '@nestjs/swagger';
+import { CreateGroupLessonDto } from './dto/create-group-lesson.dto';
 
 @ApiTags('Group Lessons')
 @Controller('lessons')
@@ -28,13 +29,7 @@ export class GroupLessonController {
   @ApiOperation({ summary: 'Lesson yaratish' })
   async createLesson(
     @Body()
-    body: {
-      group_id: number;
-      unit_id: number;
-      date: string;
-      time: string;
-      parity: 'odd' | 'even';
-    },
+    body: CreateGroupLessonDto,
   ) {
     return this.lessonService.createLesson(
       body.group_id,
@@ -42,6 +37,9 @@ export class GroupLessonController {
       new Date(body.date),
       body.time,
       body.parity,
+      body.room_id,
+      body.start_time,
+      body.end_time,
     );
   }
 

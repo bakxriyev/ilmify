@@ -7,6 +7,7 @@ import { InjectModel } from '@nestjs/sequelize';
 import { GroupLessonModel } from './entities/group-lesson.entity';
 import { GroupModel } from '../groups/model/group.entity';
 import { UnitModel } from '../units/model';
+import { RoomModel } from '../rooms/entities/room.entity';
 
 @Injectable()
 export class GroupLessonService {
@@ -21,14 +22,17 @@ export class GroupLessonService {
     private readonly unitModel: typeof UnitModel,
   ) {}
 
-  // GROUP lessons + units
+  // GROUP lessons + units + room
   async findAllByGroup(groupId: number) {
     const group = await this.groupModel.findByPk(groupId);
     if (!group) throw new NotFoundException('Group topilmadi');
 
     return this.lessonModel.findAll({
       where: { group_id: groupId },
-      include: [{ model: UnitModel }],
+      include: [
+        { model: UnitModel },
+        { model: RoomModel, as: 'room' },
+      ],
       order: [['date', 'ASC']],
     });
   }
@@ -36,22 +40,30 @@ export class GroupLessonService {
   // Lesson yaratish
   async createLesson(
     groupId: number,
-    unitId: number,
+    unitId: number | null,
     date: Date,
     time: string,
     parity: 'odd' | 'even',
+    room_id?: number,
+    start_time?: string,
+    end_time?: string,
   ) {
     const group = await this.groupModel.findByPk(groupId);
     if (!group) throw new NotFoundException('Group topilmadi');
 
-    const unit = await this.unitModel.findByPk(unitId);
-    if (!unit) throw new NotFoundException('Unit topilmadi');
+    if (unitId) {
+      const unit = await this.unitModel.findByPk(unitId);
+      if (!unit) throw new NotFoundException('Unit topilmadi');
+    }
 
     return this.lessonModel.create({
       group_id: groupId,
-      unit_id: unitId,
+      unit_id: unitId || null,
+      room_id: room_id || null,
       date,
       time,
+      start_time: start_time || time,
+      end_time: end_time || null,
       parity,
     });
   }
@@ -77,7 +89,7 @@ export class GroupLessonService {
   async bulkAttachUnits(
     data: { lesson_id: number; unit_id: number }[],
   ) {
-    if (!data.length) throw new BadRequestException('Data bo‘sh');
+    if (!data.length) throw new BadRequestException('Data bo\'sh');
 
     const updatedLessons: GroupLessonModel[] = [];
 
@@ -121,7 +133,7 @@ export class GroupLessonService {
     });
 
     if (!lessons.length) {
-      throw new NotFoundException('Bu guruhda darslar yo‘q');
+      throw new NotFoundException('Bu guruhda darslar yo\'q');
     }
 
     const units = await this.unitModel.findAll({
@@ -130,7 +142,7 @@ export class GroupLessonService {
     });
 
     if (!units.length) {
-      throw new NotFoundException('Bu levelda unitlar yo‘q');
+      throw new NotFoundException('Bu levelda unitlar yo\'q');
     }
 
     let unitIndex = 0;
@@ -165,6 +177,6 @@ export class GroupLessonService {
     if (!lesson) throw new NotFoundException('Lesson topilmadi');
 
     await lesson.destroy();
-    return { message: 'Lesson o‘chirildi' };
+    return { message: 'Lesson o\'chirildi' };
   }
 }

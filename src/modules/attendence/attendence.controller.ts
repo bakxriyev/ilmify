@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Query } from '@nestjs/common';
+import { Controller, Post, Body, Get, Query, Param, ParseIntPipe } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { AttendanceService } from './attendence.service'
 import { MarkLessonAttendanceDto } from './dto/mark-attendance.dto'
@@ -19,6 +19,15 @@ export class AttendanceController {
     @Query('date') date: string,
   ) {
     return this.service.getGroupAttendance(Number(group_id), date);
+  }
+
+  @Get('group/:groupId/monthly')
+  monthlyGrid(
+    @Param('groupId', ParseIntPipe) groupId: number,
+    @Query('year') year: string,
+    @Query('month') month: string,
+  ) {
+    return this.service.monthlyGrid(groupId, Number(year), Number(month));
   }
 
   @Get('stats')

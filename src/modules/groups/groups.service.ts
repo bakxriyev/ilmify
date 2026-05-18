@@ -37,6 +37,9 @@ export class GroupService {
     @InjectModel(AttendanceModel)
     private readonly attendanceModel: typeof AttendanceModel,
 
+    @InjectModel(RoomModel)
+    private readonly roomModel: typeof RoomModel,
+
   ) {}
 
 async create(createGroupDto: CreateGroupDto, center_id?: number): Promise<GroupModel> {
@@ -66,9 +69,10 @@ async create(createGroupDto: CreateGroupDto, center_id?: number): Promise<GroupM
     if (!level) throw new NotFoundException('Level topilmadi');
   }
 
-  // Guruhni yaratish
+  // Guruhni yaratish (room_id dan tashqari, chunki xona darslarga biriktiriladi)
+  const { room_id, ...groupData } = createGroupDto;
   const group = await this.groupModel.create({
-    ...createGroupDto,
+    ...groupData,
     center_id: center_id || null,
   } as any);
 
@@ -87,7 +91,10 @@ async create(createGroupDto: CreateGroupDto, center_id?: number): Promise<GroupM
       createGroupDto.start_date,
       createGroupDto.duration_months,
       createGroupDto.time,
-      createGroupDto.parity
+      createGroupDto.parity,
+      room_id,
+      createGroupDto.start_time,
+      createGroupDto.end_time
     );
   }
 
@@ -111,26 +118,36 @@ async create(createGroupDto: CreateGroupDto, center_id?: number): Promise<GroupM
 
     const { count, rows } = await this.groupModel.findAndCountAll({
   where: whereClause,
-  include: [
-    ...includeArray,
-    { model: GroupLessonModel, as: 'lessons' }
-  ],
+  include: includeArray,
   limit,
   offset,
   order: [
     ['name', 'ASC'],
-    [{ model: GroupLessonModel, as: 'lessons' }, 'date', 'ASC']
   ],
   distinct: true,
 });
 
     const dataWithCounts = await Promise.all(rows.map(async (group) => {
-      const studentCount = await this.groupStudentModel.count({ where: { group_id: group.id } });
+      const studentCount = await this.groupStudentModel.count({ where: { group_id: group.id, is_trial: false } });
+      const trialCount = await this.groupStudentModel.count({ where: { group_id: group.id, is_trial: true } });
       const g = group.toJSON() as any;
       g.student_count = studentCount;
-      if (g.room) {
-        g.room.available_seats = g.room.capacity - studentCount;
-        g.room.occupied_seats = studentCount;
+      g.trial_count = trialCount;
+      // Get room from the first lesson with a room assigned
+      if (g.lessons && g.lessons.length > 0) {
+        const lessonWithRoom = g.lessons.find((l: any) => l.room_id);
+        if (lessonWithRoom) {
+          const room = await this.roomModel.findByPk(lessonWithRoom.room_id);
+          if (room) {
+            g.room = {
+              id: room.id,
+              name: room.name,
+              capacity: room.capacity,
+              occupied_seats: studentCount,
+              available_seats: room.capacity - studentCount,
+            };
+          }
+        }
       }
       return g;
     }));
@@ -151,19 +168,38 @@ async create(createGroupDto: CreateGroupDto, center_id?: number): Promise<GroupM
     const includeArray = this.buildInclude(include);
 
     const group = await this.groupModel.findByPk(id, {
-      include: [...includeArray, { model: RoomModel, as: 'room' }]});
+      include: includeArray});
 
     if (!group) {
       throw new NotFoundException(`ID=${id} bo'lgan guruh topilmadi`);
     }
 
-    const studentCount = await this.groupStudentModel.count({ where: { group_id: group.id } });
+    const studentCount = await this.groupStudentModel.count({ where: { group_id: group.id, is_trial: false } });
+    const trialCount = await this.groupStudentModel.count({ where: { group_id: group.id, is_trial: true } });
     const g = group.toJSON() as any;
     g.student_count = studentCount;
-    if (g.room) {
-      g.room.available_seats = g.room.capacity - studentCount;
-      g.room.occupied_seats = studentCount;
+    g.trial_count = trialCount;
+
+    // Get room from the FIRST lesson (since all group lessons use the same room)
+    const lessonsWithRoom = await this.groupLessonModel.findAll({
+      where: { group_id: group.id, room_id: { [Op.ne]: null } },
+      include: [{ model: RoomModel, as: 'room' }],
+      order: [['date', 'ASC']],
+      limit: 1,
+    });
+
+    if (lessonsWithRoom.length > 0 && lessonsWithRoom[0].room) {
+      const room = lessonsWithRoom[0].room;
+      g.room = {
+        id: room.id,
+        name: room.name,
+        capacity: room.capacity,
+        occupied_seats: studentCount,
+        available_seats: room.capacity - studentCount,
+      };
+      g.room_id = String(room.id);
     }
+
     return g;
 }
 
@@ -281,7 +317,6 @@ async create(createGroupDto: CreateGroupDto, center_id?: number): Promise<GroupM
         attributes: ['id', 'name', 'title', 'description']
       },
       {model: GroupLessonModel, as: 'lessons'},
-      {model: RoomModel, as: 'room'}
     ];
 
     if (!include) {
@@ -318,14 +353,10 @@ async create(createGroupDto: CreateGroupDto, center_id?: number): Promise<GroupM
   arr.push({
     model: GroupLessonModel,
     as: 'lessons',
-    attributes: ['id', 'date', 'time', 'parity'],
+    attributes: ['id', 'date', 'time', 'parity', 'start_time', 'end_time', 'room_id'],
     order: [['date', 'ASC']],
   });
 }
-
-    if (items.some(item => ['room', 'rooms'].includes(item))) {
-      arr.push({ model: RoomModel, as: 'room' });
-    }
 
     return arr.length > 0 ? arr : defaultIncludes;
   }
@@ -339,7 +370,10 @@ async createLessons(
   startDate: string,
   durationMonths: number,
   time: string,
-  parity: 'odd' | 'even' | 'both'
+  parity: 'odd' | 'even' | 'both',
+  room_id?: number,
+  start_time?: string,
+  end_time?: string,
 ) {
   const lessons: any[] = [];
   const start = new Date(startDate);
@@ -367,7 +401,10 @@ async createLessons(
         group_id: groupId,
         date: new Date(current),
         time,
+        start_time: start_time || time,
+        end_time: end_time || null,
         parity: parity,
+        room_id: room_id || null,
       });
     }
 

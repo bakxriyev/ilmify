@@ -24,6 +24,9 @@ export class EducationCenterModel extends Model {
   @Column({ type: DataType.BOOLEAN, defaultValue: true })
   is_active: boolean;
 
+  @Column({ type: DataType.UUID, defaultValue: DataType.UUIDV4, unique: true })
+  public_lead_token: string;
+
   @HasMany(() => CenterBranchModel, { foreignKey: 'center_id' })
   branches: CenterBranchModel[];
 

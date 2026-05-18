@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { EducationCenterModel } from './entities/education-center.entity';
 import { CenterBranchModel } from './entities/center-branch.entity';
@@ -12,7 +12,7 @@ import { UpdateEducationCenterDto } from './dto/update-education-center.dto';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
-export class EducationCenterService {
+export class EducationCenterService implements OnModuleInit {
   constructor(
     @InjectModel(EducationCenterModel) private centerModel: typeof EducationCenterModel,
     @InjectModel(CenterBranchModel) private branchModel: typeof CenterBranchModel,
@@ -22,6 +22,18 @@ export class EducationCenterService {
     @InjectModel(ParentModel) private parentModel: typeof ParentModel,
     @InjectModel(GroupModel) private groupModel: typeof GroupModel,
   ) {}
+
+  async onModuleInit() {
+    const centers = await this.centerModel.findAll({ where: { public_lead_token: null } });
+    for (const center of centers) {
+      const crypto = await import('crypto');
+      center.public_lead_token = crypto.randomUUID();
+      await center.save();
+    }
+    if (centers.length > 0) {
+      console.log(`${centers.length} ta markazga public_lead_token yaratildi`);
+    }
+  }
 
   async create(dto: CreateEducationCenterDto) {
     const existing = await this.centerModel.findOne({ where: { name: dto.name } });
@@ -89,6 +101,15 @@ export class EducationCenterService {
     return { ...center.toJSON(), student_count: students, teacher_count: teachers, group_count: groups, admin_count: admins };
   }
 
+  async findByToken(token: string) {
+    const center = await this.centerModel.findOne({
+      where: { public_lead_token: token, is_active: true },
+      attributes: ['id', 'name', 'public_lead_token'],
+    });
+    if (!center) throw new NotFoundException('Markaz topilmadi yoki bloklangan');
+    return center;
+  }
+
   async update(id: number, dto: UpdateEducationCenterDto) {
     const center = await this.centerModel.findByPk(id);
     if (!center) throw new NotFoundException('Markaz topilmadi');
@@ -150,6 +171,17 @@ export class EducationCenterService {
     if (!branch) throw new NotFoundException('Filial topilmadi');
     await branch.destroy();
     return { message: 'Filial o\'chirildi' };
+  }
+
+  async getOrCreatePublicToken(centerId: number): Promise<string> {
+    const center = await this.centerModel.findByPk(centerId, { attributes: ['id', 'public_lead_token'] });
+    if (!center) throw new NotFoundException('Markaz topilmadi');
+    if (!center.public_lead_token) {
+      const crypto = await import('crypto');
+      center.public_lead_token = crypto.randomUUID();
+      await center.save();
+    }
+    return center.public_lead_token;
   }
 
   async isCenterActive(centerId: number): Promise<boolean> {

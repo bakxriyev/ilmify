@@ -3,6 +3,7 @@ import { InjectModel } from '@nestjs/sequelize';
 import { GroupStudentModel } from './model';
 import { GroupModel } from 'src/modules/groups';
 import { StudentModel } from 'src/modules/students';
+import { LevelModel } from '../level/model/level.entity';
 import { CreateGroupStudentDto } from './dto';
 import { UpdateGroupStudentDto } from './dto';
 import { QueryGroupStudentDto } from './dto';
@@ -20,7 +21,6 @@ export class GroupStudentService {
   ) {}
 
   async create(createGroupStudentDto: CreateGroupStudentDto): Promise<GroupStudentModel> {
-    // Check if student is already in the group
     const existingRelation = await this.groupStudentModel.findOne({
       where: {
         group_id: createGroupStudentDto.group_id,
@@ -29,11 +29,18 @@ export class GroupStudentService {
     });
 
     if (existingRelation) {
-      throw new ConflictException('Student is already in this group');
+      if (!existingRelation.left_date) {
+        throw new ConflictException('Student is already in this group');
+      }
+      const joinedDate = createGroupStudentDto.joined_date
+        ? new Date(createGroupStudentDto.joined_date)
+        : new Date();
+      await existingRelation.update({ joined_date: joinedDate, left_date: null });
+      return this.findOne(existingRelation.id);
     }
 
-    const joinedDate = createGroupStudentDto.joined_date 
-      ? new Date(createGroupStudentDto.joined_date) 
+    const joinedDate = createGroupStudentDto.joined_date
+      ? new Date(createGroupStudentDto.joined_date)
       : new Date();
 
     const result = await this.groupStudentModel.create({
@@ -89,11 +96,16 @@ export class GroupStudentService {
       include,
       limit,
       offset,
-      order: [['joined_date', 'DESC']],
+      order: [
+        [{ model: StudentModel, as: 'student' }, 'first_name', 'ASC'],
+      ],
     });
 
+    const active = rows.filter(r => !r.left_date);
+    const removed = rows.filter(r => r.left_date).sort((a, b) => new Date(b.left_date).getTime() - new Date(a.left_date).getTime());
+
     return {
-      data: rows,
+      data: [...active, ...removed],
       pagination: {
         total: count,
         page,
@@ -119,13 +131,18 @@ export class GroupStudentService {
   }
 
   async findByGroupId(groupId: number): Promise<GroupStudentModel[]> {
-    return await this.groupStudentModel.findAll({
+    const rows = await this.groupStudentModel.findAll({
       where: { group_id: groupId },
       include: [
         { model: StudentModel, as: 'student' },
       ],
       order: [['joined_date', 'ASC']],
     });
+
+    const active = rows.filter(r => !r.left_date);
+    const removed = rows.filter(r => r.left_date).sort((a, b) => new Date(b.left_date).getTime() - new Date(a.left_date).getTime());
+
+    return [...active, ...removed];
   }
 
   async findByStudentId(studentId: number): Promise<GroupStudentModel[]> {
@@ -141,7 +158,6 @@ export class GroupStudentService {
   async update(id: number, updateGroupStudentDto: UpdateGroupStudentDto): Promise<GroupStudentModel> {
     const groupStudent = await this.findOne(id);
 
-    // If updating group_id or student_id, check for conflicts
     if (updateGroupStudentDto.group_id || updateGroupStudentDto.student_id) {
       const newGroupId = updateGroupStudentDto.group_id || groupStudent.group_id;
       const newStudentId = updateGroupStudentDto.student_id || groupStudent.student_id;
@@ -154,7 +170,7 @@ export class GroupStudentService {
         },
       });
 
-      if (existingRelation) {
+      if (existingRelation && !existingRelation.left_date) {
         throw new ConflictException('Student is already in this group');
       }
     }
@@ -165,7 +181,7 @@ export class GroupStudentService {
 
   async remove(id: number): Promise<void> {
     const groupStudent = await this.findOne(id);
-    await groupStudent.destroy();
+    await groupStudent.update({ left_date: new Date() });
   }
 
   async removeByGroupAndStudent(groupId: number, studentId: number): Promise<void> {
@@ -180,18 +196,18 @@ export class GroupStudentService {
       throw new NotFoundException('GroupStudent relation not found');
     }
 
-    await groupStudent.destroy();
+    await groupStudent.update({ left_date: new Date() });
   }
 
   async bulkAddStudentsToGroup(
     groupId: number,
     studentIds: number[],
-    joined_date?: string, // optional
+    joined_date?: string,
   ) {
     if (!studentIds || studentIds.length === 0) {
       throw new BadRequestException('studentIds array is required');
     }
- const joinDate = joined_date ? new Date(joined_date) : new Date();
+    const joinDate = joined_date ? new Date(joined_date) : new Date();
     const results = [];
 
     for (const studentId of studentIds) {
@@ -208,8 +224,10 @@ export class GroupStudentService {
           student_id: studentId,
           joined_date: joinDate,
         });
-
         results.push(created);
+      } else if (existing.left_date) {
+        await existing.update({ joined_date: joinDate, left_date: null });
+        results.push(existing);
       }
     }
 
@@ -217,26 +235,46 @@ export class GroupStudentService {
   }
 
   async bulkRemoveStudentsFromGroup(groupId: number, studentIds: number[]): Promise<void> {
-    await this.groupStudentModel.destroy({
-      where: {
-        group_id: groupId,
-        student_id: {
-          [Op.in]: studentIds,
+    await this.groupStudentModel.update(
+      { left_date: new Date() },
+      {
+        where: {
+          group_id: groupId,
+          student_id: { [Op.in]: studentIds },
+          left_date: null,
         },
       },
+    );
+  }
+
+  async findAllTrial() {
+    return this.groupStudentModel.findAll({
+      where: { is_trial: true, left_date: null },
+      include: [
+        { model: GroupModel, as: 'group', include: [{ model: LevelModel, as: 'level' }] },
+        { model: StudentModel, as: 'student' },
+      ],
+      order: [['joined_date', 'DESC']],
     });
+  }
+
+  async confirmTrial(id: number) {
+    const relation = await this.findOne(id);
+    await relation.update({ is_trial: false, left_date: null });
+    return { message: 'Student to\'liq a\'zoga aylandi', data: await this.findOne(id) };
   }
 
   async getGroupStats(groupId: number) {
     const totalStudents = await this.groupStudentModel.count({
-      where: { group_id: groupId },
+      where: { group_id: groupId, left_date: null },
     });
 
     const recentJoins = await this.groupStudentModel.count({
       where: {
         group_id: groupId,
+        left_date: null,
         joined_date: {
-          [Op.gte]: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Last 30 days
+          [Op.gte]: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
         },
       },
     });

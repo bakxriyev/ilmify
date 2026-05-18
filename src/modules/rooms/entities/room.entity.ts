@@ -1,5 +1,5 @@
 import { Table, Model, Column, DataType, HasMany, ForeignKey, BelongsTo, CreatedAt, UpdatedAt } from 'sequelize-typescript';
-import { GroupModel } from '../../groups/model/group.entity';
+import { GroupLessonModel } from '../../group-lesson/entities/group-lesson.entity';
 import { EducationCenterModel } from '../../education-centers/entities/education-center.entity';
 
 @Table({ tableName: 'rooms', timestamps: true, createdAt: 'created_at', updatedAt: 'updated_at' })
@@ -20,8 +20,8 @@ export class RoomModel extends Model {
   @BelongsTo(() => EducationCenterModel)
   center: EducationCenterModel;
 
-  @HasMany(() => GroupModel, { foreignKey: 'room_id', as: 'groups' })
-  groups: GroupModel[];
+  @HasMany(() => GroupLessonModel, { foreignKey: 'room_id', as: 'lessons' })
+  lessons: GroupLessonModel[];
 
   @CreatedAt
   @Column({ type: DataType.DATE })

@@ -22,12 +22,12 @@ export class CreateGroupDto {
   @IsOptional()
   level_id?: number;
 
-  @ApiProperty({ description: 'Xona ID', example: 1, required: false })
+  @ApiProperty({ description: 'Xona ID (darslarga biriktiriladi)', example: 1, required: false })
   @IsNumber()
   @IsOptional()
   room_id?: number;
 
-  // =================== Darslar uchun qo‘shimcha ===================
+  // =================== Darslar uchun qoshimcha ===================
   @ApiProperty({ description: 'Dars boshlanish sanasi', example: '2026-01-30', required: false })
   @IsOptional()
   @IsDateString()
@@ -43,12 +43,22 @@ export class CreateGroupDto {
   @IsString()
   time?: string;
 
+  @ApiProperty({ description: 'Dars boshlanish vaqti', example: '14:00', required: false })
+  @IsOptional()
+  @IsString()
+  start_time?: string;
+
+  @ApiProperty({ description: 'Dars tugash vaqti', example: '15:30', required: false })
+  @IsOptional()
+  @IsString()
+  end_time?: string;
+
   @ApiProperty({ description: 'Toq/juft hafta', example: 'odd', enum: ['odd','even'], required: false })
   @IsOptional()
   @IsEnum(['odd','even'])
   parity?: 'odd' | 'even';
 
-  @ApiProperty({ description: 'Oylik to\'lov narxi', example: 200000, required: false })
+  @ApiProperty({ description: 'Oylik tolov narxi', example: 200000, required: false })
   @IsOptional()
   @IsNumber()
   monthly_price?: number;

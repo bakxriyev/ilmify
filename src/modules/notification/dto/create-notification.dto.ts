@@ -52,4 +52,7 @@ export class CreateNotificationDto {
 
   @ApiPropertyOptional({ description: 'Markaz ID' })
   center_id?: number;
+
+  @ApiPropertyOptional({ description: 'Shablon ID (agar tanlansa, placeholders avtomatik to\'ldiriladi)' })
+  template_id?: number;
 }

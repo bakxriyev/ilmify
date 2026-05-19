@@ -96,14 +96,15 @@ export class NotificationController {
 
   @Post('templates')
   @ApiOperation({ summary: 'Yangi shablon yaratish' })
-  async createTemplate(@Body() dto: CreateTemplateDto) {
+  async createTemplate(@Body() dto: CreateTemplateDto, @Req() req?: any) {
+    if (!dto.center_id && req?.center_id) dto.center_id = req.center_id;
     return this.service.createTemplate(dto);
   }
 
   @Get('templates/all')
   @ApiOperation({ summary: 'Barcha shablonlar' })
-  async findAllTemplates() {
-    return this.service.findAllTemplates();
+  async findAllTemplates(@Req() req?: any) {
+    return this.service.findAllTemplates(req?.center_id);
   }
 
   @Patch('templates/:id')

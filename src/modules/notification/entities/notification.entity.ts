@@ -1,4 +1,3 @@
-// src/modules/notification/entities/notification.entity.ts
 import { Table, Column, Model, DataType, ForeignKey, BelongsTo } from 'sequelize-typescript';
 import { StudentModel } from '../../students/model/student.entity';
 import { TeacherModel } from '../../teachers/model/teacher.model';
@@ -39,6 +38,9 @@ export class NotificationModel extends Model {
 
   @Column({ type: DataType.INTEGER, allowNull: true })
   sender_id: number;
+
+  @Column({ type: DataType.INTEGER, allowNull: true })
+  center_id: number;
 
   @BelongsTo(() => StudentModel)
   student: StudentModel;

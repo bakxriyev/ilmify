@@ -3,7 +3,9 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/sequelize';
 import { Op } from 'sequelize';
 import { PaymentService } from './payment.service';
+import { NotificationService } from '../notification/notification.service';
 import { GroupModel } from '../groups/model/group.entity';
+import { EducationCenterModel } from '../education-centers/entities/education-center.entity';
 
 @Injectable()
 export class PaymentCronService {
@@ -11,7 +13,9 @@ export class PaymentCronService {
 
   constructor(
     private paymentService: PaymentService,
+    private notificationService: NotificationService,
     @InjectModel(GroupModel) private groupModel: typeof GroupModel,
+    @InjectModel(EducationCenterModel) private centerModel: typeof EducationCenterModel,
   ) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_10AM)
@@ -25,8 +29,18 @@ export class PaymentCronService {
     }
 
     try {
-      const remindResult = await this.paymentService.sendPaymentReminders();
-      this.logger.log(`Sent ${remindResult.sent} payment reminders`);
+      const centers = await this.centerModel.findAll({ attributes: ['id'] });
+      let totalSent = 0;
+      for (const center of centers) {
+        try {
+          const result = await this.notificationService.sendDailyPaymentReminders(center.id);
+          totalSent += result.sent;
+        } catch {}
+      }
+      // Also send reminders for global (no center_id)
+      const globalResult = await this.notificationService.sendDailyPaymentReminders();
+      totalSent += globalResult.sent;
+      this.logger.log(`Sent ${totalSent} payment reminders with templates`);
     } catch (err) {
       this.logger.error('Payment reminders failed:', err);
     }

@@ -10,10 +10,11 @@ import { GroupStudentModel } from '../group_student_model';
 import { ParentStudentModel } from '../parents/entities/parent-student.entity';
 import { ParentModel } from '../parents/entities/parent.entity';
 import { NotificationModule } from '../notification/notification.module';
+import { EducationCenterModel } from '../education-centers/entities/education-center.entity';
 
 @Module({
   imports: [
-    SequelizeModule.forFeature([PaymentModel, StudentModel, GroupModel, GroupStudentModel, ParentStudentModel, ParentModel]),
+    SequelizeModule.forFeature([PaymentModel, StudentModel, GroupModel, GroupStudentModel, ParentStudentModel, ParentModel, EducationCenterModel]),
     NotificationModule,
   ],
   controllers: [PaymentController],

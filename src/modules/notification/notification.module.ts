@@ -8,6 +8,8 @@ import { NotificationController } from './notification.controller';
 import { StudentModel } from '../students/model/student.entity';
 import { TeacherModel } from '../teachers/model/teacher.model';
 import { GroupStudentModel } from '../group_student_model';
+import { GroupModel } from '../groups/model/group.entity';
+import { PaymentModel } from '../payments/entities/payment.entity';
 
 @Module({
   imports: [
@@ -17,6 +19,8 @@ import { GroupStudentModel } from '../group_student_model';
       StudentModel,
       TeacherModel,
       GroupStudentModel,
+      GroupModel,
+      PaymentModel,
     ]),
   ],
   providers: [NotificationGateway, NotificationService],

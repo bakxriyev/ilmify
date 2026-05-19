@@ -12,4 +12,7 @@ export class CreateTemplateDto {
 
   @ApiPropertyOptional({ description: 'Kategoriya', example: 'payment', enum: ['payment', 'holiday', 'event', 'other'] })
   category?: string;
+
+  @ApiPropertyOptional({ description: 'Markaz ID' })
+  center_id?: number;
 }

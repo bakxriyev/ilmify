@@ -154,6 +154,19 @@ export class PaymentService {
     }).filter(Boolean);
   }
 
+  async getYearOverview(year: number, center_id?: number) {
+    const months = [];
+    for (let m = 1; m <= 12; m++) {
+      const overview = await this.getStudentsOverview(m, year, center_id);
+      const total = overview.length;
+      const paid = overview.filter(i => i.status === 'paid').length;
+      const unpaid = overview.filter(i => i.status === 'unpaid').length;
+      const partial = overview.filter(i => i.status === 'partial').length;
+      months.push({ month: m, year, total, paid, unpaid, partial });
+    }
+    return months;
+  }
+
   async findByGroup(groupId: number, month?: number, year?: number) {
     const now = new Date();
     const targetMonth = month || now.getMonth() + 1;

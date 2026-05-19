@@ -19,6 +19,7 @@ import { ExerciseResultModel } from '../exercises_result/model/exercises_result.
 import { VocabResultModel } from '../vocab_result';
 import { UnitResultModel } from '../unit_result/model/unit_result.entity';
 import { GroupLessonModel } from '../group-lesson/entities/group-lesson.entity';
+import { RoomModel } from '../rooms/entities/room.entity';
 import { StudentCoinsModel } from '../student-coins/entities/student-coin.entity';
 import { ParentModel } from '../parents/entities/parent.entity';
 import { ParentStudentModel } from '../parents/entities/parent-student.entity';
@@ -272,7 +273,7 @@ export class StudentService {
               { model: TeacherModel, as: 'mainTeacher', attributes: { exclude: ['password'] } },
               { model: TeacherModel, as: 'supportTeacher', attributes: { exclude: ['password'] } },
               { model: LevelModel, as: 'level' },
-              { model: GroupLessonModel, as: 'lessons' },
+              { model: GroupLessonModel, as: 'lessons', include: [{ model: RoomModel, as: 'room' }] },
             ],
           },
           {
@@ -295,7 +296,7 @@ export class StudentService {
                   { model: TeacherModel, as: 'mainTeacher', attributes: { exclude: ['password'] } },
                   { model: TeacherModel, as: 'supportTeacher', attributes: { exclude: ['password'] } },
                   { model: LevelModel, as: 'level' },
-                  { model: GroupLessonModel, as: 'lessons' },
+                  { model: GroupLessonModel, as: 'lessons', include: [{ model: RoomModel, as: 'room' }] },
                 ],
               },
             ],

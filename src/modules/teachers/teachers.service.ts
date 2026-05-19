@@ -22,15 +22,13 @@ export class TeacherService {
     private groupStudentModel: typeof GroupStudentModel,
   ) {}
 
-  async findAll(includeGroups: boolean = false, center_id?: number) {
+  async findAll(center_id?: number) {
     const where: any = {};
     if (center_id) where.center_id = center_id;
-    const include = includeGroups
-      ? [
-          { model: GroupModel, as: 'mainGroups' },
-          { model: GroupModel, as: 'supportGroups' },
-        ]
-      : [];
+    const include = [
+      { model: GroupModel, as: 'mainGroups' },
+      { model: GroupModel, as: 'supportGroups' },
+    ];
 
     return await this.teacherModel.findAll({ where, include });
   }

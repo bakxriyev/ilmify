@@ -63,11 +63,8 @@ export class TeacherController {
 
   @Get()
   @ApiOperation({ summary: 'Barcha teacherlarni olish' })
-  async findAll(
-    @Query('includeGroups', new ParseBoolPipe({ optional: true })) includeGroups?: boolean,
-    @Req() req?: any,
-  ) {
-    return this.teacherService.findAll(includeGroups, req?.center_id);
+  async findAll(@Req() req?: any) {
+    return this.teacherService.findAll(req?.center_id);
   }
 
   @Get(':id')

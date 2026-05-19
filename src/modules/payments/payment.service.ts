@@ -136,8 +136,8 @@ export class PaymentService {
       const payment = payments.find(p => Number(p.student_id) === Number(student.id) && Number(p.group_id) === Number(group.id));
       const status = payment?.status || PaymentStatus.UNPAID;
       const monthlyPrice = Number(group.monthly_price) || 0;
-      const paidAmount = status === PaymentStatus.UNPAID ? 0 : (payment?.amount || 0);
-      const debt = status === PaymentStatus.PAID ? 0 : (monthlyPrice - paidAmount);
+      const paidAmount = payment ? Number(payment.amount) : 0;
+      const debt = status === PaymentStatus.PAID ? 0 : Math.max(0, monthlyPrice - paidAmount);
 
       return {
         student: { id: Number(student.id), first_name: student.first_name, last_name: student.last_name, phone_number: student.phone_number },
@@ -155,17 +155,32 @@ export class PaymentService {
   }
 
   async findByGroup(groupId: number, month?: number, year?: number) {
+    const now = new Date();
+    const targetMonth = month || now.getMonth() + 1;
+    const targetYear = year || now.getFullYear();
+    const monthStart = new Date(targetYear, targetMonth - 1, 1);
+    const monthEnd = new Date(targetYear, targetMonth, 0, 23, 59, 59);
+
     const group = await this.groupModel.findByPk(groupId, {
       attributes: ['id', 'name', 'monthly_price'],
     });
-    const monthlyPrice = group?.monthly_price || 0;
+    const monthlyPrice = Number(group?.monthly_price) || 0;
 
-    const where: any = { group_id: groupId };
-    if (month) where.month = month;
-    if (year) where.year = year;
+    // Shu oyda guruhda faol bo'lgan studentlarni olish
+    const isCurrentMonth = targetMonth === now.getMonth() + 1 && targetYear === now.getFullYear();
+    const groupStudentWhere: any = { group_id: groupId };
+    groupStudentWhere.joined_date = { [Op.lte]: monthEnd };
+    if (isCurrentMonth) {
+      groupStudentWhere.left_date = null;
+    } else {
+      groupStudentWhere[Op.or] = [
+        { left_date: null },
+        { left_date: { [Op.gte]: monthStart } },
+      ];
+    }
 
     const groupStudents = await this.groupStudentModel.findAll({
-      where: { group_id: groupId },
+      where: groupStudentWhere,
     });
 
     const studentIds = groupStudents.map(gs => gs.student_id);
@@ -175,31 +190,27 @@ export class PaymentService {
     });
 
     const payments = await this.paymentModel.findAll({
-      where,
-      include: [{ model: StudentModel, attributes: ['id'] }],
+      where: { group_id: groupId, month: targetMonth, year: targetYear },
     });
 
-    const now = new Date();
-    const targetMonth = month || now.getMonth() + 1;
-    const targetYear = year || now.getFullYear();
-    const monthStart = new Date(targetYear, targetMonth - 1, 1);
     const overdueDays = Math.max(0, Math.floor((now.getTime() - monthStart.getTime()) / (1000 * 60 * 60 * 24)));
 
     return students.map(s => {
       const payment = payments.find(p => Number(p.student_id) === Number(s.id));
       const status = payment?.status || PaymentStatus.UNPAID;
-      const paidAmount = payment?.amount && status === PaymentStatus.PAID ? payment.amount : (payment?.amount && status === PaymentStatus.PARTIAL ? payment.amount : 0);
-      const debt = status === PaymentStatus.PAID ? 0 : (monthlyPrice - paidAmount);
+      const paidAmount = payment ? Number(payment.amount) : 0;
+      const debt = status === PaymentStatus.PAID ? 0 : Math.max(0, monthlyPrice - paidAmount);
 
       return {
         student: { id: s.id, first_name: s.first_name, last_name: s.last_name, phone_number: s.phone_number },
+        group: { id: groupId, name: group?.name || '', monthly_price: monthlyPrice },
         payment: payment || null,
         status,
         month: targetMonth,
         year: targetYear,
         monthly_price: monthlyPrice,
         paid_amount: paidAmount,
-        debt: Math.max(0, debt),
+        debt,
         overdue_days: status === PaymentStatus.PAID ? 0 : overdueDays,
       };
     });

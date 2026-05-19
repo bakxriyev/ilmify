@@ -229,7 +229,6 @@ export class StudentService {
           ],
         },
       ],
-      attributes: { exclude: ['password'] },
       limit,
       offset,
       order: [[sort_by, sort_order]],
@@ -310,7 +309,6 @@ export class StudentService {
 
     const student = await this.studentModel.findByPk(id, {
       include: includeOptions,
-      attributes: { exclude: ['password'] },
     });
 
     if (!student) throw new NotFoundException('Student topilmadi');
@@ -320,7 +318,6 @@ export class StudentService {
   // ================= UPDATE =================
   async update(id: number, updateDto: UpdateStudentDto) {
     const student = await this.studentModel.findByPk(id, {
-      attributes: { exclude: ['password'] },
     });
     if (!student) throw new NotFoundException('Student topilmadi');
 

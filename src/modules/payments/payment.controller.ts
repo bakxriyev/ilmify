@@ -62,8 +62,8 @@ export class PaymentController {
   @ApiOperation({ summary: 'Barcha studentlar to\'lov holati' })
   @ApiQuery({ name: 'month', required: true })
   @ApiQuery({ name: 'year', required: true })
-  getStudentsOverview(@Query('month') month: string, @Query('year') year: string) {
-    return this.service.getStudentsOverview(Number(month), Number(year));
+  getStudentsOverview(@Query('month') month: string, @Query('year') year: string, @Req() req?: any) {
+    return this.service.getStudentsOverview(Number(month), Number(year), req?.center_id);
   }
 
   @Get('students/:id')

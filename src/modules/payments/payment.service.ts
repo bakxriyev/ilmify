@@ -82,7 +82,7 @@ export class PaymentService {
     });
   }
 
-  async getStudentsOverview(month: number, year: number) {
+  async getStudentsOverview(month: number, year: number, center_id?: number) {
     const now = new Date();
     const monthStart = new Date(year, month - 1, 1);
     const monthEnd = new Date(year, month, 0, 23, 59, 59);
@@ -110,10 +110,15 @@ export class PaymentService {
       ];
     }
 
+    const studentInclude: any = { model: StudentModel, as: 'student', attributes: ['id', 'first_name', 'last_name', 'phone_number'] };
+    if (center_id) {
+      studentInclude.where = { center_id };
+    }
+
     const relations = await this.groupStudentModel.findAll({
       where: relationWhere,
       include: [
-        { model: StudentModel, as: 'student', attributes: ['id', 'first_name', 'last_name', 'phone_number'] },
+        studentInclude,
         { model: GroupModel, as: 'group', attributes: ['id', 'name', 'monthly_price'] },
       ],
     });

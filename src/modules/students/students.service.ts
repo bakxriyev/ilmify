@@ -77,19 +77,20 @@ export class StudentService {
 
   // ================= CREATE =================
   async create(createDto: CreateStudentDto, center_id?: number) {
+    const orConditions: any[] = [
+      { phone_number: createDto.phone_number },
+    ];
+    if (createDto.email) {
+      orConditions.push({ email: createDto.email });
+    }
     const existingStudent = await this.studentModel.findOne({
-      where: {
-        [Op.or]: [
-          { phone_number: createDto.phone_number },
-          { email: createDto.email },
-        ],
-      },
+      where: { [Op.or]: orConditions },
     });
 
     if (existingStudent) {
       if (existingStudent.phone_number === createDto.phone_number)
         throw new ConflictException('Bu telefon nomer bilan student allaqachon mavjud');
-      if (existingStudent.email === createDto.email)
+      if (createDto.email && existingStudent.email === createDto.email)
         throw new ConflictException('Bu email bilan student allaqachon mavjud');
     }
 
@@ -420,8 +421,8 @@ export class StudentService {
   }
 
   // ================= GET STUDENTS BY GROUP =================
-  async getStudentsByGroup(groupId: number, queryDto: StudentQueryDto) {
-    return this.findAll({ ...queryDto, group_id: groupId.toString() });
+  async getStudentsByGroup(groupId: number, queryDto: StudentQueryDto, center_id?: number) {
+    return this.findAll({ ...queryDto, group_id: groupId.toString() }, center_id);
   }
 
   // ================= GET PROFILE =================

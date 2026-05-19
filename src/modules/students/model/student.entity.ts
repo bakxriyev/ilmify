@@ -36,7 +36,7 @@ export class StudentModel extends Model<StudentModel> {
   @Column({ type: DataType.INTEGER, allowNull: true })
   age: number;
 
-  @Column({ type: DataType.STRING, allowNull: false, unique: true })
+  @Column({ type: DataType.STRING, allowNull: true, unique: true })
   email: string;
 
   @Column({ type: DataType.STRING, allowNull: true })

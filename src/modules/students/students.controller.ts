@@ -116,8 +116,9 @@ async findAll(@Query() query: StudentQueryDto, @Req() req?: any) {
   async getStudentsByGroup(
     @Param('groupId', ParseIntPipe) groupId: number,
     @Query() query: StudentQueryDto,
+    @Req() req?: any,
   ) {
-    return await this.studentService.getStudentsByGroup(groupId, query);
+    return await this.studentService.getStudentsByGroup(groupId, query, req?.center_id);
   }
 
   @Get(':id/statistics')

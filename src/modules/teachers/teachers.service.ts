@@ -92,9 +92,11 @@ export class TeacherService {
   }
 
   async create(createTeacherDto: CreateTeacherDto, center_id?: number) {
-    const existingTeacher = await this.findByEmail(createTeacherDto.gmail);
-    if (existingTeacher) {
-      throw new ConflictException('Teacher with this email already exists');
+    if (createTeacherDto.gmail) {
+      const existingTeacher = await this.findByEmail(createTeacherDto.gmail);
+      if (existingTeacher) {
+        throw new ConflictException('Teacher with this email already exists');
+      }
     }
 
     const hashedPassword = await bcrypt.hash(createTeacherDto.password, 10);

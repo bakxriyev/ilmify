@@ -85,10 +85,33 @@ export class PaymentService {
   async getStudentsOverview(month: number, year: number) {
     const now = new Date();
     const monthStart = new Date(year, month - 1, 1);
+    const monthEnd = new Date(year, month, 0, 23, 59, 59);
+    const isCurrentMonth = month === now.getMonth() + 1 && year === now.getFullYear();
     const overdueDays = Math.max(0, Math.floor((now.getTime() - monthStart.getTime()) / (1000 * 60 * 60 * 24)));
 
+    const relationWhere: any = {};
+    if (isCurrentMonth) {
+      relationWhere.left_date = null;
+    } else {
+      const groupsWithLessons = await GroupLessonModel.findAll({
+        where: {
+          date: { [Op.gte]: monthStart, [Op.lte]: monthEnd },
+        },
+        attributes: ['group_id'],
+      });
+      const groupIdsWithLessons = [...new Set(groupsWithLessons.map(g => Number(g.group_id)))];
+      if (groupIdsWithLessons.length === 0) return [];
+
+      relationWhere.group_id = { [Op.in]: groupIdsWithLessons };
+      relationWhere.joined_date = { [Op.lte]: monthEnd };
+      relationWhere[Op.or] = [
+        { left_date: null },
+        { left_date: { [Op.gte]: monthStart } },
+      ];
+    }
+
     const relations = await this.groupStudentModel.findAll({
-      where: { left_date: null },
+      where: relationWhere,
       include: [
         { model: StudentModel, as: 'student', attributes: ['id', 'first_name', 'last_name', 'phone_number'] },
         { model: GroupModel, as: 'group', attributes: ['id', 'name', 'monthly_price'] },
@@ -108,7 +131,7 @@ export class PaymentService {
       const payment = payments.find(p => Number(p.student_id) === Number(student.id) && Number(p.group_id) === Number(group.id));
       const status = payment?.status || PaymentStatus.UNPAID;
       const monthlyPrice = Number(group.monthly_price) || 0;
-      const paidAmount = payment?.amount || 0;
+      const paidAmount = status === PaymentStatus.UNPAID ? 0 : (payment?.amount || 0);
       const debt = status === PaymentStatus.PAID ? 0 : (monthlyPrice - paidAmount);
 
       return {

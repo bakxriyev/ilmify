@@ -158,6 +158,9 @@ export class StudentQueryDto {
   phone_number?: string;
 
   @ApiPropertyOptional()
+  search?: string;
+
+  @ApiPropertyOptional()
   group_id?: string;
 
   @ApiPropertyOptional()

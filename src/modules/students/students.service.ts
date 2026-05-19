@@ -172,14 +172,23 @@ export class StudentService {
 
     if (center_id) whereClause.center_id = center_id;
 
-    if (queryDto.first_name)
-      whereClause.first_name = { [Op.iLike]: `%${queryDto.first_name}%` };
-    if (queryDto.last_name)
-      whereClause.last_name = { [Op.iLike]: `%${queryDto.last_name}%` };
-    if (queryDto.email)
-      whereClause.email = { [Op.iLike]: `%${queryDto.email}%` };
-    if (queryDto.phone_number)
-      whereClause.phone_number = { [Op.iLike]: `%${queryDto.phone_number}%` };
+    if (queryDto.search) {
+      whereClause[Op.or] = [
+        { first_name: { [Op.iLike]: `%${queryDto.search}%` } },
+        { last_name: { [Op.iLike]: `%${queryDto.search}%` } },
+        { email: { [Op.iLike]: `%${queryDto.search}%` } },
+        { phone_number: { [Op.iLike]: `%${queryDto.search}%` } },
+      ];
+    } else {
+      if (queryDto.first_name)
+        whereClause.first_name = { [Op.iLike]: `%${queryDto.first_name}%` };
+      if (queryDto.last_name)
+        whereClause.last_name = { [Op.iLike]: `%${queryDto.last_name}%` };
+      if (queryDto.email)
+        whereClause.email = { [Op.iLike]: `%${queryDto.email}%` };
+      if (queryDto.phone_number)
+        whereClause.phone_number = { [Op.iLike]: `%${queryDto.phone_number}%` };
+    }
 
     if (queryDto.group_id) whereClause.group_id = parseInt(queryDto.group_id);
     if (queryDto.min_age || queryDto.max_age) {

@@ -14,7 +14,8 @@ export class CreateStudentDto {
   @IsOptional()
   age: number;
 
-  @ApiProperty({ example: 'ali.karimov@gmail.com' })
+  @ApiProperty({ example: 'ali.karimov@gmail.com', required: false })
+  @IsOptional()
   @IsEmail()
   email: string;
 

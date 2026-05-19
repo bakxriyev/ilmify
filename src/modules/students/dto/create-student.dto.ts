@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { IsOptional } from 'class-validator';
 
 export class CreateStudentDto {
   @ApiProperty({
@@ -16,13 +17,17 @@ export class CreateStudentDto {
   @ApiProperty({
     example: 18,
     description: 'Talabaning yoshi',
+    required: false,
   })
+  @IsOptional()
   age: number;
 
   @ApiProperty({
     example: 'ali.karimov@gmail.com',
     description: 'Talabaning email manzili',
+    required: false,
   })
+  @IsOptional()
   email: string;
 
   @ApiProperty({
@@ -34,7 +39,9 @@ export class CreateStudentDto {
   @ApiProperty({
     example: 'https://example.com/photos/ali.jpg',
     description: 'Talabaning rasmi (URL yoki filename)',
+    required: false,
   })
+  @IsOptional()
   photo: string;
 
   @ApiProperty({
@@ -46,6 +53,8 @@ export class CreateStudentDto {
   @ApiProperty({
     example: 3,
     description: 'Guruh ID (foreign key)',
+    required: false,
   })
+  @IsOptional()
   group_id: number;
 }

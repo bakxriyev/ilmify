@@ -26,9 +26,10 @@ export class CreateTeacherDto {
     description: 'Teacher email manzili (unique)',
     example: 'john.doe@example.com',
     type: String,
+    required: false,
   })
   @IsEmail()
-  @IsNotEmpty()
+  @IsOptional()
   gmail: string;
 
   @ApiProperty({

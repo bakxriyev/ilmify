@@ -41,14 +41,38 @@ export class DashboardService {
       this.roomModel.count({ where: center_id ? { center_id } : {} }),
     ]);
 
-    const totalLessons = await this.lessonModel.count();
-    const totalAttendance = await this.attendanceModel.count();
-    const presentAttendance = await this.attendanceModel.count({ where: { is_present: true } });
+    let groupIds: number[] = [];
+    if (center_id) {
+      const groups = await this.groupModel.findAll({ where: { center_id }, attributes: ['id'] });
+      groupIds = groups.map(g => g.id);
+    }
+
+    const lessonWhere: any = {};
+    if (groupIds.length) lessonWhere.group_id = groupIds;
+    const totalLessons = await this.lessonModel.count({ where: lessonWhere });
+
+    const attendanceWhere: any = {};
+    if (groupIds.length) attendanceWhere.group_id = groupIds;
+    const [totalAttendance, presentAttendance] = await Promise.all([
+      this.attendanceModel.count({ where: attendanceWhere }),
+      this.attendanceModel.count({ where: { ...attendanceWhere, is_present: true } }),
+    ]);
     const attendanceRate = totalAttendance > 0 ? Math.round((presentAttendance / totalAttendance) * 100) : 0;
 
+    const lessonGroupsWhere: any = {};
+    if (groupIds.length) lessonGroupsWhere.group_id = groupIds;
     const lessonGroups = await this.lessonModel.findAll({
       attributes: ['group_id'],
+      where: lessonGroupsWhere,
       group: ['group_id'],
+    });
+
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const studentsThisMonthWhere: any = {};
+    if (center_id) studentsThisMonthWhere.center_id = center_id;
+    const studentsThisMonth = await this.studentModel.count({
+      where: { ...studentsThisMonthWhere, createdAt: { [Op.gte]: monthStart } },
     });
 
     return {
@@ -59,7 +83,7 @@ export class DashboardService {
       total_rooms: totalRooms,
       total_lessons: totalLessons,
       attendance_rate: attendanceRate,
-      students_this_month: totalStudents,
+      students_this_month: studentsThisMonth,
       groups_with_lessons: lessonGroups.length,
     };
   }

@@ -180,7 +180,7 @@ export class PaymentService {
     for (const payment of unpaidPayments) {
       const student = payment.student as any;
       if (!student) continue;
-      await this.notificationService.create({
+      await this.notificationService.send({
         userId: Number(student.id),
         title: "To'lov eslatmasi",
         description: `Hurmatli ${student.first_name}, ${(payment as any).month}-oy uchun to'lov qilish muddati yaqin. Iltimos, to'lovni amalga oshiring.`,
@@ -212,7 +212,7 @@ export class PaymentService {
     for (const p of unpaid) {
       const student = p.student as any;
       if (!student) continue;
-      await this.notificationService.create({
+      await this.notificationService.send({
         userId: Number(student.id),
         title: "To'lov eslatmasi",
         description: `Hurmatli ${student.first_name}, guruhda 3 ta dars o'tdi. Iltimos, ${month}-oy uchun to'lovni amalga oshiring!`,
@@ -230,7 +230,7 @@ export class PaymentService {
     });
     if (!student) throw new NotFoundException('Student topilmadi');
 
-    await this.notificationService.create({
+    await this.notificationService.send({
       userId: Number(studentId),
       title: 'Darsga kelmadingiz',
       description: `${student.first_name}, siz ${lessonDate} sanasidagi darsga kelmadingiz.`,
@@ -241,7 +241,7 @@ export class PaymentService {
     for (const link of parentLinks) {
       const parent = await this.parentModel.findByPk(link.parent_id);
       if (parent) {
-        await this.notificationService.create({
+        await this.notificationService.send({
           userId: Number(parent.id),
           title: "Farzandingiz darsga kelmadi",
           description: `Farzandingiz ${student.first_name} ${lessonDate} sanasidagi darsga kelmadi.`,

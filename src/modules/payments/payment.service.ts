@@ -84,6 +84,10 @@ export class PaymentService {
 
   async getStudentsOverview(month: number, year: number, center_id?: number) {
     const now = new Date();
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const requestedMonthStart = new Date(year, month - 1, 1);
+    if (requestedMonthStart > currentMonthStart) return [];
+
     const monthStart = new Date(year, month - 1, 1);
     const monthEnd = new Date(year, month, 0, 23, 59, 59);
     const isCurrentMonth = month === now.getMonth() + 1 && year === now.getFullYear();
@@ -155,8 +159,13 @@ export class PaymentService {
   }
 
   async getYearOverview(year: number, center_id?: number) {
+    const now = new Date();
     const months = [];
     for (let m = 1; m <= 12; m++) {
+      if (year > now.getFullYear() || (year === now.getFullYear() && m > now.getMonth() + 1)) {
+        months.push({ month: m, year, total: 0, paid: 0, unpaid: 0, partial: 0 });
+        continue;
+      }
       const overview = await this.getStudentsOverview(m, year, center_id);
       const total = overview.length;
       const paid = overview.filter(i => i.status === 'paid').length;
@@ -171,6 +180,11 @@ export class PaymentService {
     const now = new Date();
     const targetMonth = month || now.getMonth() + 1;
     const targetYear = year || now.getFullYear();
+
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const requestedMonthStart = new Date(targetYear, targetMonth - 1, 1);
+    if (requestedMonthStart > currentMonthStart) return [];
+
     const monthStart = new Date(targetYear, targetMonth - 1, 1);
     const monthEnd = new Date(targetYear, targetMonth, 0, 23, 59, 59);
 

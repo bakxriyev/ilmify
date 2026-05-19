@@ -41,7 +41,7 @@ export class NotificationService {
   async send(dto: CreateNotificationDto, imagePath?: string) {
     let template: NotificationTemplateModel | null = null;
     if (dto.template_id) {
-      template = await this.templateModel.findByPk(dto.template_id);
+      template = await this.templateModel.findByPk(Number(dto.template_id));
     }
 
     const targets = await this.resolveTargets(dto);
@@ -52,10 +52,11 @@ export class NotificationService {
     const senderId = dto.sender_id || null;
     const centerId = dto.center_id || null;
 
-    // Collect all student IDs for batch loading
+    // Collect and normalize all student IDs to numbers
     const targetStudentIds = targets
       .map(t => t.studentId)
-      .filter((id): id is number => id != null);
+      .filter((id): id is number => id != null)
+      .map(id => Number(id));
 
     // Batch-load students with group and payment info
     const studentsMap = new Map<number, any>();
@@ -108,7 +109,7 @@ export class NotificationService {
       }
 
       // Replace placeholders if we have student data
-      const studentData = t.studentId ? studentsMap.get(t.studentId) : null;
+      const studentData = t.studentId ? studentsMap.get(Number(t.studentId)) : null;
       if (studentData) {
         title = this.replacePlaceholders(title, studentData);
         if (description) {
@@ -117,18 +118,18 @@ export class NotificationService {
       }
 
       const notif = await this.notificationModel.create({
-        user_id: t.userId,
+        user_id: t.userId ? Number(t.userId) : null,
         role: t.role,
-        student_id: t.studentId || null,
-        teacher_id: t.teacherId || null,
+        student_id: t.studentId ? Number(t.studentId) : null,
+        teacher_id: t.teacherId ? Number(t.teacherId) : null,
         title,
         description,
         link: dto.link || null,
         image: imagePath || null,
         is_read: false,
         sender_type: senderType,
-        sender_id: senderId,
-        center_id: centerId,
+        sender_id: senderId ? Number(senderId) : null,
+        center_id: centerId ? Number(centerId) : null,
       });
 
       const payload = {
@@ -173,28 +174,32 @@ export class NotificationService {
     const targets: Array<{ userId?: number; role?: string; studentId?: number; teacherId?: number }> = [];
 
     if (dto.student_id) {
-      targets.push({ userId: dto.student_id, role: 'student', studentId: dto.student_id });
+      const sid = Number(dto.student_id);
+      targets.push({ userId: sid, role: 'student', studentId: sid });
     }
 
     if (dto.teacher_id) {
-      targets.push({ userId: dto.teacher_id, role: 'teacher', teacherId: dto.teacher_id });
+      const tid = Number(dto.teacher_id);
+      targets.push({ userId: tid, role: 'teacher', teacherId: tid });
     }
 
     if (dto.student_ids?.length) {
       for (const sid of dto.student_ids) {
-        targets.push({ userId: sid, role: 'student', studentId: sid });
+        const nid = Number(sid);
+        targets.push({ userId: nid, role: 'student', studentId: nid });
       }
     }
 
     if (dto.teacher_ids?.length) {
       for (const tid of dto.teacher_ids) {
-        targets.push({ userId: tid, role: 'teacher', teacherId: tid });
+        const nid = Number(tid);
+        targets.push({ userId: nid, role: 'teacher', teacherId: nid });
       }
     }
 
     if (dto.group_id) {
       const groupStudents = await this.groupStudentModel.findAll({
-        where: { group_id: dto.group_id },
+        where: { group_id: Number(dto.group_id) },
         attributes: ['student_id'],
       });
       for (const gs of groupStudents) {
@@ -203,8 +208,9 @@ export class NotificationService {
     }
 
     if (dto.group_ids?.length) {
+      const groupStudentWhere = { [Op.in]: dto.group_ids.map((id: any) => Number(id)) };
       const groupStudents = await this.groupStudentModel.findAll({
-        where: { group_id: { [Op.in]: dto.group_ids } },
+        where: { group_id: groupStudentWhere },
         attributes: ['student_id'],
       });
       const seen = new Set<number>();
@@ -248,13 +254,13 @@ export class NotificationService {
     }
 
     if (dto.userId && targets.length === 0) {
-      targets.push({ userId: dto.userId });
+      targets.push({ userId: Number(dto.userId) });
     }
 
     const unique = new Map<number, typeof targets[0]>();
     for (const t of targets) {
       if (t.userId) {
-        const key = t.userId;
+        const key = Number(t.userId);
         if (!unique.has(key)) unique.set(key, t);
       } else {
         unique.set(targets.length + Math.random(), t);

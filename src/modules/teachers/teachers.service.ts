@@ -2,7 +2,6 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Op } from 'sequelize';
-import * as bcrypt from 'bcrypt';
 import * as jwt from 'jsonwebtoken';
 import { TeacherModel } from './model/teacher.model';
 import { GroupModel } from '../groups/model/group.entity';
@@ -30,8 +29,7 @@ export class TeacherService {
       { model: GroupModel, as: 'supportGroups' },
     ];
 
-    const teachers = await this.teacherModel.findAll({ where, include });
-    return teachers.map(t => { const j = t.toJSON(); delete j.password; return j; });
+    return await this.teacherModel.findAll({ where, include });
   }
 
   async findOne(id: number, includeGroups: boolean = false) {
@@ -64,7 +62,6 @@ export class TeacherService {
     }
 
     const json = teacher.toJSON() as any;
-    delete json.password;
 
     // Har bir guruh uchun student_count ni hisoblash
     if (includeGroups) {
@@ -99,20 +96,15 @@ export class TeacherService {
       }
     }
 
-    const hashedPassword = await bcrypt.hash(createTeacherDto.password, 10);
-
-    const teacher = await this.teacherModel.create({
+    return await this.teacherModel.create({
       ...createTeacherDto,
-      password: hashedPassword,
       center_id: center_id || null,
     });
-    const json = teacher.toJSON() as any;
-    delete json.password;
-    return json;
   }
 
   async update(id: number, updateTeacherDto: UpdateTeacherDto) {
-    const teacher = await this.findOne(id);
+    const teacher = await this.teacherModel.findByPk(id);
+    if (!teacher) throw new NotFoundException('Teacher topilmadi');
 
     if (updateTeacherDto.gmail && updateTeacherDto.gmail !== teacher.gmail) {
       const existingTeacher = await this.findByEmail(updateTeacherDto.gmail);
@@ -121,9 +113,7 @@ export class TeacherService {
       }
     }
 
-    if (updateTeacherDto.password) {
-      updateTeacherDto.password = await bcrypt.hash(updateTeacherDto.password, 10);
-    }
+    // password plain text saqlanadi
 
     await teacher.update(updateTeacherDto);
     return this.findOne(id);
@@ -132,7 +122,7 @@ export class TeacherService {
   async updatePassword(id: number, dto: UpdateTeacherPasswordDto) {
     const teacher = await this.teacherModel.findByPk(id);
     if (!teacher) throw new NotFoundException('Teacher topilmadi');
-    teacher.password = await bcrypt.hash(dto.password, 10);
+    teacher.password = dto.password;
     await teacher.save();
     return { message: 'Parol muvaffaqiyatli yangilandi' };
   }
@@ -180,7 +170,7 @@ export class TeacherService {
   async validatePassword(gmail: string, password: string): Promise<boolean> {
     const teacher = await this.findByEmail(gmail);
     if (!teacher) return false;
-    return await bcrypt.compare(password, teacher.password);
+    return teacher.password === password;
   }
 
   async login(phone_number: string, password: string) {
@@ -193,7 +183,7 @@ export class TeacherService {
     throw new NotFoundException('Teacher not found');
   }
 
-  const isMatch = await bcrypt.compare(password, teacher.password);
+  const isMatch = teacher.password === password;
 
   if (!isMatch) {
     throw new ConflictException('Password incorrect');

@@ -200,7 +200,6 @@ export class StudentService {
 
     const { count, rows } = await this.studentModel.findAndCountAll({
       where: whereClause,
-      attributes: { exclude: ['password'] },
       include: [
         {
     model: StudentCoinsModel,
@@ -323,7 +322,6 @@ export class StudentService {
 
     const student = await this.studentModel.findByPk(id, {
       include: includeOptions,
-      attributes: { exclude: ['password'] },
     });
 
     if (!student) throw new NotFoundException('Student topilmadi');

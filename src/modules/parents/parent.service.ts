@@ -10,7 +10,7 @@ import { LevelModel } from '../level/model/level.entity';
 import { GroupStudentModel } from '../group_student_model';
 import { ChatRoomModel, ChatRoomType } from '../chat/entities/chat-room.entity';
 import * as jwt from 'jsonwebtoken';
-import { ParentLoginDto, CreateParentDto, LinkStudentDto } from './dto/parent.dto';
+import { ParentLoginDto, CreateParentDto, UpdateParentDto, UpdateParentPasswordDto, LinkStudentDto } from './dto/parent.dto';
 
 @Injectable()
 export class ParentService {
@@ -123,6 +123,21 @@ export class ParentService {
     });
 
     return relations.map((r) => r.student).filter(Boolean);
+  }
+
+  async update(id: number, dto: UpdateParentDto) {
+    const parent = await this.parentModel.findByPk(id);
+    if (!parent) throw new NotFoundException('Ota-ona topilmadi');
+    await parent.update(dto);
+    return { id: parent.id, first_name: parent.first_name, last_name: parent.last_name, phone_number: parent.phone_number, photo: parent.photo };
+  }
+
+  async updatePassword(id: number, dto: UpdateParentPasswordDto) {
+    const parent = await this.parentModel.findByPk(id);
+    if (!parent) throw new NotFoundException('Ota-ona topilmadi');
+    parent.password = dto.password;
+    await parent.save();
+    return { message: 'Parol muvaffaqiyatli yangilandi' };
   }
 
   async linkStudent(parentId: number, dto: LinkStudentDto) {

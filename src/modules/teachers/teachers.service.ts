@@ -1,5 +1,5 @@
 // src/modules/teachers/teacher.service.ts
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Op } from 'sequelize';
 import * as bcrypt from 'bcrypt';
@@ -11,7 +11,7 @@ import { RoomModel } from '../rooms/entities/room.entity';
 import { UserDeviceModel } from '../user_device/entities/user_device.entity';
 import { GroupLessonModel } from '../group-lesson/entities/group-lesson.entity';
 import { EducationCenterModel } from '../education-centers/entities/education-center.entity';
-import { CreateTeacherDto, UpdateTeacherDto } from './dto';
+import { CreateTeacherDto, UpdateTeacherDto, UpdateTeacherPasswordDto } from './dto';
 
 @Injectable()
 export class TeacherService {
@@ -122,6 +122,14 @@ export class TeacherService {
 
     await teacher.update(updateTeacherDto);
     return this.findOne(id);
+  }
+
+  async updatePassword(id: number, dto: UpdateTeacherPasswordDto) {
+    const teacher = await this.teacherModel.findByPk(id);
+    if (!teacher) throw new NotFoundException('Teacher topilmadi');
+    teacher.password = await bcrypt.hash(dto.password, 10);
+    await teacher.save();
+    return { message: 'Parol muvaffaqiyatli yangilandi' };
   }
 
   /**

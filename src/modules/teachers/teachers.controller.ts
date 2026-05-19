@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  Put,
   UseInterceptors,
   UploadedFile,
   HttpCode,
@@ -18,7 +19,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { TeacherService } from './teachers.service';
-import { CreateTeacherDto, UpdateTeacherDto } from './dto';
+import { CreateTeacherDto, UpdateTeacherDto, UpdateTeacherPasswordDto } from './dto';
 import { multerOptions } from '../../config/multer.config';
 import { LoginTeacherDto } from './dto/login.teacher.dto';
 
@@ -112,6 +113,16 @@ export class TeacherController {
       updateTeacherDto.photo = file.filename;
     }
     return this.teacherService.update(id, updateTeacherDto);
+  }
+
+  @Put(':id/password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Teacher parolini yangilash' })
+  async updatePassword(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateTeacherPasswordDto,
+  ) {
+    return this.teacherService.updatePassword(id, dto);
   }
 
   @Delete(':id')

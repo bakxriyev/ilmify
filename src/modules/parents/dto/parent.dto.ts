@@ -40,6 +40,25 @@ export class CreateParentDto {
   photo?: string;
 }
 
+export class UpdateParentDto {
+  @ApiProperty({ required: false })
+  first_name?: string;
+
+  @ApiProperty({ required: false })
+  last_name?: string;
+
+  @ApiProperty({ required: false })
+  phone_number?: string;
+
+  @ApiProperty({ required: false })
+  photo?: string;
+}
+
+export class UpdateParentPasswordDto {
+  @ApiProperty()
+  password: string;
+}
+
 export class LinkStudentDto {
   @ApiProperty()
   student_id: number;

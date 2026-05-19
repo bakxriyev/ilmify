@@ -1,7 +1,9 @@
-import { Controller, Post, Get, Body, Param, UseGuards, ParseIntPipe, Query, Req } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { Controller, Post, Get, Body, Param, Patch, Put, UseGuards, ParseIntPipe, Query, Req, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery, ApiConsumes } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ParentService } from './parent.service';
-import { ParentLoginDto, CreateParentDto, LinkStudentDto } from './dto/parent.dto';
+import { ParentLoginDto, CreateParentDto, UpdateParentDto, UpdateParentPasswordDto, LinkStudentDto } from './dto/parent.dto';
+import { multerOptions } from '../../config/multer.config';
 import { ChatAuthGuard } from '../chat/chat-auth.guard';
 
 @ApiTags('Parents')
@@ -36,6 +38,35 @@ export class ParentController {
   @ApiOperation({ summary: 'Yangi ota-ona qoshish' })
   async create(@Body() dto: CreateParentDto) {
     return this.parentService.create(dto);
+  }
+
+  @Patch(':id')
+  @ApiBearerAuth()
+  @UseGuards(ChatAuthGuard)
+  @ApiOperation({ summary: 'Ota-onani yangilash (rasm bilan)' })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('photo', multerOptions))
+  async update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateParentDto,
+    @UploadedFile() file?: Express.Multer.File,
+    @Req() req?: any,
+  ) {
+    if (file) {
+      dto.photo = file.filename;
+    }
+    return this.parentService.update(id, dto);
+  }
+
+  @Put(':id/password')
+  @ApiBearerAuth()
+  @UseGuards(ChatAuthGuard)
+  @ApiOperation({ summary: 'Ota-ona parolini yangilash' })
+  async updatePassword(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateParentPasswordDto,
+  ) {
+    return this.parentService.updatePassword(id, dto);
   }
 
   @Get(':id/children')

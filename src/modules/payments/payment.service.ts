@@ -82,7 +82,56 @@ export class PaymentService {
     });
   }
 
+  async getStudentsOverview(month: number, year: number) {
+    const now = new Date();
+    const monthStart = new Date(year, month - 1, 1);
+    const overdueDays = Math.max(0, Math.floor((now.getTime() - monthStart.getTime()) / (1000 * 60 * 60 * 24)));
+
+    const relations = await this.groupStudentModel.findAll({
+      where: { left_date: null },
+      include: [
+        { model: StudentModel, as: 'student', attributes: ['id', 'first_name', 'last_name', 'phone_number'] },
+        { model: GroupModel, as: 'group', attributes: ['id', 'name', 'monthly_price'] },
+      ],
+    });
+
+    const payments = await this.paymentModel.findAll({
+      where: { month, year },
+    });
+
+    return relations.map(rel => {
+      const relJson = rel.toJSON() as any;
+      const student = relJson.student;
+      const group = relJson.group;
+      if (!student || !group) return null;
+
+      const payment = payments.find(p => Number(p.student_id) === Number(student.id) && Number(p.group_id) === Number(group.id));
+      const status = payment?.status || PaymentStatus.UNPAID;
+      const monthlyPrice = Number(group.monthly_price) || 0;
+      const paidAmount = payment?.amount || 0;
+      const debt = status === PaymentStatus.PAID ? 0 : (monthlyPrice - paidAmount);
+
+      return {
+        student: { id: Number(student.id), first_name: student.first_name, last_name: student.last_name, phone_number: student.phone_number },
+        group: { id: Number(group.id), name: group.name, monthly_price: monthlyPrice },
+        payment: payment || null,
+        status,
+        month,
+        year,
+        monthly_price: monthlyPrice,
+        paid_amount: paidAmount,
+        debt: Math.max(0, debt),
+        overdue_days: status === PaymentStatus.PAID ? 0 : overdueDays,
+      };
+    }).filter(Boolean);
+  }
+
   async findByGroup(groupId: number, month?: number, year?: number) {
+    const group = await this.groupModel.findByPk(groupId, {
+      attributes: ['id', 'name', 'monthly_price'],
+    });
+    const monthlyPrice = group?.monthly_price || 0;
+
     const where: any = { group_id: groupId };
     if (month) where.month = month;
     if (year) where.year = year;
@@ -105,15 +154,25 @@ export class PaymentService {
     const now = new Date();
     const targetMonth = month || now.getMonth() + 1;
     const targetYear = year || now.getFullYear();
+    const monthStart = new Date(targetYear, targetMonth - 1, 1);
+    const overdueDays = Math.max(0, Math.floor((now.getTime() - monthStart.getTime()) / (1000 * 60 * 60 * 24)));
 
     return students.map(s => {
       const payment = payments.find(p => Number(p.student_id) === Number(s.id));
+      const status = payment?.status || PaymentStatus.UNPAID;
+      const paidAmount = payment?.amount && status === PaymentStatus.PAID ? payment.amount : (payment?.amount && status === PaymentStatus.PARTIAL ? payment.amount : 0);
+      const debt = status === PaymentStatus.PAID ? 0 : (monthlyPrice - paidAmount);
+
       return {
         student: { id: s.id, first_name: s.first_name, last_name: s.last_name, phone_number: s.phone_number },
         payment: payment || null,
-        status: payment?.status || PaymentStatus.UNPAID,
+        status,
         month: targetMonth,
         year: targetYear,
+        monthly_price: monthlyPrice,
+        paid_amount: paidAmount,
+        debt: Math.max(0, debt),
+        overdue_days: status === PaymentStatus.PAID ? 0 : overdueDays,
       };
     });
   }

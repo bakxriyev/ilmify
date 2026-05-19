@@ -58,6 +58,14 @@ export class PaymentController {
     return this.service.sendPaymentReminders();
   }
 
+  @Get('students-overview')
+  @ApiOperation({ summary: 'Barcha studentlar to\'lov holati' })
+  @ApiQuery({ name: 'month', required: true })
+  @ApiQuery({ name: 'year', required: true })
+  getStudentsOverview(@Query('month') month: string, @Query('year') year: string) {
+    return this.service.getStudentsOverview(Number(month), Number(year));
+  }
+
   @Get('students/:id')
   @ApiOperation({ summary: "Student to'lovlari" })
   findByStudent(@Param('id') id: string) {

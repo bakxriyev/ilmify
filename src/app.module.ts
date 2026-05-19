@@ -1,6 +1,7 @@
 import { appConfig, databaseConfig } from './config';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { SequelizeModule } from '@nestjs/sequelize';
 import { UnitModel, UnitModule } from './modules/units';
 import {GroupModel, GroupStudentModel, RedoIncorrectTaskModel, StudentModel, VocabAnswerModel, VocabModel, VocabResultModel } from './modules';
@@ -68,6 +69,7 @@ import { TariffModel } from './modules/tariffs/entities/tariff.entity';
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       load: [appConfig, databaseConfig],

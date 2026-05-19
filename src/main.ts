@@ -37,8 +37,11 @@ async function bootstrap() {
   });
 
   app.enableCors({
-    origin: '*',
-    methods: ['POST', 'GET', 'PATCH', 'DELETE', 'PUT'],
+    origin: true,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Accept', 'Authorization', 'x-center-id', 'X-Requested-With'],
+    credentials: true,
+    maxAge: 86400,
   });
 
   // Katta fayllar yuklash uchun body parser limitini oshirish

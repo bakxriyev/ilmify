@@ -200,6 +200,7 @@ export class StudentService {
 
     const { count, rows } = await this.studentModel.findAndCountAll({
       where: whereClause,
+      attributes: { exclude: ['password'] },
       include: [
         {
     model: StudentCoinsModel,
@@ -296,6 +297,7 @@ export class StudentService {
                   { model: TeacherModel, as: 'mainTeacher', attributes: { exclude: ['password'] } },
                   { model: TeacherModel, as: 'supportTeacher', attributes: { exclude: ['password'] } },
                   { model: LevelModel, as: 'level' },
+                  { model: RoomModel, as: 'room' },
                   { model: GroupLessonModel, as: 'lessons', include: [{ model: RoomModel, as: 'room' }] },
                 ],
               },
@@ -314,12 +316,14 @@ export class StudentService {
               { model: TeacherModel, as: 'mainTeacher', attributes: { exclude: ['password'] } },
               { model: TeacherModel, as: 'supportTeacher', attributes: { exclude: ['password'] } },
               { model: LevelModel, as: 'level' },
+              { model: RoomModel, as: 'room' },
             ],
           },
         ];
 
     const student = await this.studentModel.findByPk(id, {
       include: includeOptions,
+      attributes: { exclude: ['password'] },
     });
 
     if (!student) throw new NotFoundException('Student topilmadi');

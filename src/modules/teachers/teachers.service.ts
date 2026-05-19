@@ -30,7 +30,8 @@ export class TeacherService {
       { model: GroupModel, as: 'supportGroups' },
     ];
 
-    return await this.teacherModel.findAll({ where, include });
+    const teachers = await this.teacherModel.findAll({ where, include });
+    return teachers.map(t => { const j = t.toJSON(); delete j.password; return j; });
   }
 
   async findOne(id: number, includeGroups: boolean = false) {
@@ -63,6 +64,7 @@ export class TeacherService {
     }
 
     const json = teacher.toJSON() as any;
+    delete json.password;
 
     // Har bir guruh uchun student_count ni hisoblash
     if (includeGroups) {
@@ -99,11 +101,14 @@ export class TeacherService {
 
     const hashedPassword = await bcrypt.hash(createTeacherDto.password, 10);
 
-    return await this.teacherModel.create({
+    const teacher = await this.teacherModel.create({
       ...createTeacherDto,
       password: hashedPassword,
       center_id: center_id || null,
     });
+    const json = teacher.toJSON() as any;
+    delete json.password;
+    return json;
   }
 
   async update(id: number, updateTeacherDto: UpdateTeacherDto) {

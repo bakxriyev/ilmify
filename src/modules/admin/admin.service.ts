@@ -175,6 +175,15 @@ export class AdminService {
 
     const center = (admin as any).center;
 
+    // Login type bo'yicha role tekshirish
+    const loginType = phoneLoginDto.type || 'admin';
+    if (loginType === 'admin' && admin.role === AdminRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Bu hisob super adminga tegishli. Iltimos, super admin panelidan foydalaning');
+    }
+    if (loginType === 'super_admin' && admin.role !== AdminRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Bu sahifa faqat super adminlar uchun');
+    }
+
     // Super admin har doim kira oladi
     if (admin.role !== AdminRole.SUPER_ADMIN) {
       if (!center) throw new ForbiddenException('Siz hech qanday o\'quv markaziga biriktirilmagansiz');

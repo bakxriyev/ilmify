@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, MinLength, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class PhoneLoginDto {
@@ -18,4 +18,13 @@ export class PhoneLoginDto {
   @IsNotEmpty()
   @MinLength(6)
   password: string;
+
+  @ApiProperty({ 
+    description: 'Login turi: "admin" yoki "super_admin"', 
+    required: false,
+    example: 'admin'
+  })
+  @IsOptional()
+  @IsString()
+  type?: string;
 }

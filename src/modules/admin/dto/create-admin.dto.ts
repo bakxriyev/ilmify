@@ -4,7 +4,7 @@ import { AdminRole } from '../model/admin.entity';
 
 export class CreateAdminDto {
   @ApiProperty({ 
-    description: 'To‘liq ism va familiya', 
+    description: 'To‘liq ism va familiyasi', 
     example: 'Kamron Baxriyev' 
   })
   @IsString()

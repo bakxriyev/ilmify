@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsNumber, IsBoolean } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsNumber, IsBoolean, Min } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateEducationCenterDto {
@@ -21,6 +21,10 @@ export class CreateEducationCenterDto {
   @ApiPropertyOptional({ example: 1 })
   @IsNumber() @IsOptional()
   tariff_id?: number;
+
+  @ApiPropertyOptional({ example: 1, description: 'Necha oylik: 1, 3, 6, 12' })
+  @IsNumber() @IsOptional() @Min(1)
+  tariff_duration?: number;
 
   @ApiPropertyOptional()
   @IsOptional()

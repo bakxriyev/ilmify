@@ -5,6 +5,7 @@ import { EducationCenterService } from './education-center.service';
 import { EducationCenterModel } from './entities/education-center.entity';
 import { CenterBranchModel } from './entities/center-branch.entity';
 import { TariffModel } from '../tariffs/entities/tariff.entity';
+import { TariffModule } from '../tariffs/tariff.module';
 import { AdminModel } from '../admin/model/admin.entity';
 import { StudentModel } from '../students/model/student.entity';
 import { TeacherModel } from '../teachers/model/teacher.model';
@@ -12,7 +13,7 @@ import { ParentModel } from '../parents/entities/parent.entity';
 import { GroupModel } from '../groups/model/group.entity';
 
 @Module({
-  imports: [SequelizeModule.forFeature([EducationCenterModel, CenterBranchModel, TariffModel, AdminModel, StudentModel, TeacherModel, ParentModel, GroupModel])],
+  imports: [SequelizeModule.forFeature([EducationCenterModel, CenterBranchModel, TariffModel, AdminModel, StudentModel, TeacherModel, ParentModel, GroupModel]), TariffModule],
   controllers: [EducationCenterController],
   providers: [EducationCenterService],
   exports: [EducationCenterService],

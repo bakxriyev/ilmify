@@ -313,6 +313,13 @@ export class AdminService {
           logo: center.logo,
           location: center.location,
           phone: center.phone,
+          tariff_id: center.tariff_id,
+          tariff_duration: center.tariff_duration,
+          tariff_price: center.tariff_price,
+          tariff_started_at: center.tariff_started_at,
+          tariff_ends_at: center.tariff_ends_at,
+          trial_ends_at: center.trial_ends_at,
+          tariff: center.tariff ? { id: center.tariff.id, name: center.tariff.name, student_min: center.tariff.student_min, student_max: center.tariff.student_max } : null,
         } : null,
       },
     };

@@ -38,6 +38,12 @@ export class EducationCenterModel extends Model {
   @Column({ type: DataType.DATE, allowNull: true })
   trial_ends_at: Date;
 
+  @Column({ type: DataType.INTEGER, allowNull: true })
+  tariff_duration: number;
+
+  @Column({ type: DataType.DECIMAL(15, 2), allowNull: true })
+  tariff_price: number;
+
   @Column({ type: DataType.DATE, allowNull: true })
   tariff_started_at: Date;
 

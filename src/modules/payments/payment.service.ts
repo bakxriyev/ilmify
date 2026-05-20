@@ -249,6 +249,13 @@ export class PaymentService {
     return { total_debt: totalDebt, debtors_count: debtorsCount, total_students: overview.length };
   }
 
+  async getAllTimeTotal(center_id?: number) {
+    const where: any = { status: PaymentStatus.PAID };
+    if (center_id) where.center_id = center_id;
+    const total = await this.paymentModel.sum('amount', { where });
+    return { total_income: total || 0 };
+  }
+
   async findByGroup(groupId: number, month?: number, year?: number) {
     const now = new Date();
     const targetMonth = month || now.getMonth() + 1;

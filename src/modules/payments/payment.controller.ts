@@ -66,6 +66,12 @@ export class PaymentController {
     return this.service.getTotalDebt(month ? Number(month) : undefined, year ? Number(year) : undefined, req?.center_id);
   }
 
+  @Get('total-income')
+  @ApiOperation({ summary: 'Barcha davrdagi jami tushum' })
+  getAllTimeTotal(@Req() req?: any) {
+    return this.service.getAllTimeTotal(req?.center_id);
+  }
+
   @Get('students-overview')
   @ApiOperation({ summary: 'Barcha studentlar to\'lov holati' })
   @ApiQuery({ name: 'month', required: true })

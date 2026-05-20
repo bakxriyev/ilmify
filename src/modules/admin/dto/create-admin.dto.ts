@@ -21,7 +21,7 @@ export class CreateAdminDto {
 
   @ApiProperty({ 
     description: 'Parol (kamida 6 ta belgidan iborat)', 
-    example: 'strongpassword123', 
+    example: 'kamron123', 
     minLength: 6 
   })
   @IsString()
@@ -31,7 +31,7 @@ export class CreateAdminDto {
 
   @ApiPropertyOptional({ 
     description: 'Profil rasmi URL', 
-    example: 'https://example.com/photo.jpg' 
+    example: 'https://api.ilmify-edu.uz/photo.jpg' 
   })
   @IsString()
   @IsOptional()

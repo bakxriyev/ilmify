@@ -70,13 +70,13 @@ export class AdminService {
   }
 
   // Token generatsiya qilish
-  private generateTokens(admin: AdminModel) {
+  private generateTokens(admin: AdminModel, effectiveRole?: string) {
     const payload = { 
       sub: admin.id, 
       email: admin.email,
       phone_number: admin.phone_number,
       full_name: admin.full_name,
-      role: admin.role,
+      role: effectiveRole || admin.role,
       center_id: admin.center_id,
     };
 
@@ -275,8 +275,13 @@ export class AdminService {
       if (!updatedCenter?.is_active) throw new ForbiddenException('Markaz vaqtincha bloklangan. Tarifni yangilang.');
     }
 
-    // Tokenlarni generatsiya qilish
-    const tokens = this.generateTokens(admin);
+    // Backwards compatibility: eski admin (role='admin', center_id bor, permissions yo'q) → director
+    const effectiveRole = (admin.role === AdminRole.ADMIN && admin.center_id && !admin.permissions)
+      ? AdminRole.DIRECTOR
+      : admin.role;
+
+    // Tokenlarni generatsiya qilish (effectiveRole bilan)
+    const tokens = this.generateTokens(admin, effectiveRole);
     
     // Refresh tokenni saqlash va last_login ni yangilash
     await admin.update({
@@ -286,16 +291,20 @@ export class AdminService {
 
     // Parolni response'dan olib tashlash
     const { password, refresh_token, ...adminWithoutPassword } = admin.toJSON();
-    
+
+    const effectivePermissions = effectiveRole === AdminRole.DIRECTOR
+      ? null
+      : this.parsePermissions(adminWithoutPassword.permissions);
+
     return {
       message: 'Login successful',
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
       admin: {
         ...adminWithoutPassword,
-        role: admin.role || 'admin',
+        role: effectiveRole || 'admin',
         center_id: admin.center_id,
-        permissions: this.parsePermissions(adminWithoutPassword.permissions),
+        permissions: effectivePermissions,
         center: center ? {
           id: center.id,
           name: center.name,
@@ -317,8 +326,13 @@ export class AdminService {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
+    // Backwards compatibility: eski admin → director
+    const effectiveRole = (admin.role === AdminRole.ADMIN && admin.center_id && !admin.permissions)
+      ? AdminRole.DIRECTOR
+      : admin.role;
+
     // Yangi tokenlarni generatsiya qilish
-    const tokens = this.generateTokens(admin);
+    const tokens = this.generateTokens(admin, effectiveRole);
     
     // Yangi refresh tokenni saqlash
     await admin.update({

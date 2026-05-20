@@ -178,8 +178,8 @@ export class PaymentService {
 
   async getMonthlyIncome(year: number, center_id?: number) {
     const where: any = { year, status: PaymentStatus.PAID };
-    if (center_id) where['$group.center_id$'] = center_id;
-    const payments = await this.paymentModel.findAll({ where, include: [{ model: GroupModel, as: 'group', attributes: [] }], raw: true });
+    if (center_id) where.center_id = center_id;
+    const payments = await this.paymentModel.findAll({ where, raw: true });
     const result = [];
     for (let m = 1; m <= 12; m++) {
       const monthly = payments.filter((p: any) => p.month === m);
@@ -187,6 +187,16 @@ export class PaymentService {
       result.push({ month: m, year, total });
     }
     return result;
+  }
+
+  async getTotalDebt(center_id?: number) {
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const year = now.getFullYear();
+    const overview = await this.getStudentsOverview(month, year, center_id);
+    const totalDebt = overview.reduce((sum: number, item: any) => sum + (item.debt || 0), 0);
+    const debtorsCount = overview.filter((item: any) => (item.debt || 0) > 0).length;
+    return { total_debt: totalDebt, debtors_count: debtorsCount, total_students: overview.length };
   }
 
   async findByGroup(groupId: number, month?: number, year?: number) {

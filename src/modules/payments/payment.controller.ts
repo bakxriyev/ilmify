@@ -58,6 +58,12 @@ export class PaymentController {
     return this.service.sendPaymentReminders();
   }
 
+  @Get('total-debt')
+  @ApiOperation({ summary: 'Jami qarzdorlik (joriy oy)' })
+  getTotalDebt(@Req() req?: any) {
+    return this.service.getTotalDebt(req?.center_id);
+  }
+
   @Get('students-overview')
   @ApiOperation({ summary: 'Barcha studentlar to\'lov holati' })
   @ApiQuery({ name: 'month', required: true })

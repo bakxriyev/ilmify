@@ -93,14 +93,13 @@ export class PaymentService {
     const isCurrentMonth = month === now.getMonth() + 1 && year === now.getFullYear();
     const overdueDays = Math.max(0, Math.floor((now.getTime() - monthStart.getTime()) / (1000 * 60 * 60 * 24)));
 
+    // 1. Shu oyda guruhda bo'lgan studentlarni topish
     const relationWhere: any = {};
     if (isCurrentMonth) {
       relationWhere.left_date = null;
     } else {
       const groupsWithLessons = await GroupLessonModel.findAll({
-        where: {
-          date: { [Op.gte]: monthStart, [Op.lte]: monthEnd },
-        },
+        where: { date: { [Op.gte]: monthStart, [Op.lte]: monthEnd } },
         attributes: ['group_id'],
       });
       const groupIdsWithLessons = [...new Set(groupsWithLessons.map(g => Number(g.group_id)))];
@@ -127,35 +126,86 @@ export class PaymentService {
       ],
     });
 
-    const payments = await this.paymentModel.findAll({
-      where: { month, year },
-    });
+    // 2. Shu oy ichida to'lov qilgan studentlarni ham olish (guruhdan chiqib ketgan bo'lsa ham)
+    const paymentsWhere: any = { month, year };
+    if (center_id) paymentsWhere.center_id = center_id;
+    const allPayments = await this.paymentModel.findAll({ where: paymentsWhere });
 
-    return relations.map(rel => {
+    // 3. Ikkalasini birlashtirish — har bir student faqat 1 marta
+    const studentMap = new Map<number, any>();
+
+    // Avval guruhdagi studentlarni qo'shamiz
+    for (const rel of relations) {
       const relJson = rel.toJSON() as any;
       const student = relJson.student;
       const group = relJson.group;
-      if (!student || !group) return null;
+      if (!student || !group) continue;
+      const key = Number(student.id);
 
-      const payment = payments.find(p => Number(p.student_id) === Number(student.id) && Number(p.group_id) === Number(group.id));
-      const status = payment?.status || PaymentStatus.UNPAID;
-      const monthlyPrice = Number(group.monthly_price) || 0;
-      const paidAmount = payment ? Number(payment.amount) : 0;
-      const debt = status === PaymentStatus.PAID ? 0 : Math.max(0, monthlyPrice - paidAmount);
+      if (!studentMap.has(key)) {
+        studentMap.set(key, {
+          student: { id: key, first_name: student.first_name, last_name: student.last_name, phone_number: student.phone_number },
+          group: { id: Number(group.id), name: group.name, monthly_price: Number(group.monthly_price) || 0 },
+          month, year, relationGroupId: Number(group.id),
+        });
+      }
+    }
 
-      return {
-        student: { id: Number(student.id), first_name: student.first_name, last_name: student.last_name, phone_number: student.phone_number },
-        group: { id: Number(group.id), name: group.name, monthly_price: monthlyPrice },
-        payment: payment || null,
+    // Keyin to'lov qilganlarni qo'shamiz (agar mavjud bo'lmasa)
+    for (const p of allPayments) {
+      const pJson = p.toJSON() as any;
+      const key = Number(pJson.student_id);
+      if (!studentMap.has(key)) {
+        // Studentni alohida yuklaymiz
+        const stu = await this.studentModel.findByPk(key, { attributes: ['id', 'first_name', 'last_name', 'phone_number'] });
+        if (!stu) continue;
+        const grp = await this.groupModel.findByPk(pJson.group_id, { attributes: ['id', 'name', 'monthly_price'] });
+        if (!grp) continue;
+        studentMap.set(key, {
+          student: { id: key, first_name: stu.first_name, last_name: stu.last_name, phone_number: stu.phone_number },
+          group: { id: Number(grp.id), name: grp.name, monthly_price: Number(grp.monthly_price) || 0 },
+          month, year, relationGroupId: Number(grp.id),
+        });
+      }
+    }
+
+    // 4. Status va qarzdorlikni hisoblash
+    const result: any[] = [];
+    for (const [, entry] of studentMap) {
+      const monthlyPrice = entry.group.monthly_price;
+
+      // Studentning shu oydagi barcha to'lovlarini topamiz (istalgan guruh bo'yicha)
+      const studentPayments = allPayments.filter(p => Number(p.student_id) === entry.student.id);
+      const totalPaidAmount = studentPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+      const latestPayment = studentPayments.length > 0 ? studentPayments.reduce((latest, p) =>
+        new Date(p.created_at) > new Date(latest.created_at) ? p : latest
+      ) : null;
+
+      // Status: to'lov summasiga qarab
+      let status = PaymentStatus.UNPAID;
+      if (totalPaidAmount >= monthlyPrice && monthlyPrice > 0) {
+        status = PaymentStatus.PAID;
+      } else if (totalPaidAmount > 0) {
+        status = PaymentStatus.PARTIAL;
+      }
+
+      const debt = Math.max(0, monthlyPrice - totalPaidAmount);
+
+      result.push({
+        student: entry.student,
+        group: entry.group,
+        payment: latestPayment ? { id: latestPayment.id, amount: latestPayment.amount, status: latestPayment.status, paid_at: latestPayment.paid_at, note: latestPayment.note, created_by: latestPayment.created_by, created_at: latestPayment.created_at, student_id: latestPayment.student_id, group_id: latestPayment.group_id, month, year } : null,
         status,
         month,
         year,
         monthly_price: monthlyPrice,
-        paid_amount: paidAmount,
-        debt: Math.max(0, debt),
+        paid_amount: totalPaidAmount,
+        debt,
         overdue_days: status === PaymentStatus.PAID ? 0 : overdueDays,
-      };
-    }).filter(Boolean);
+      });
+    }
+
+    return result;
   }
 
   async getYearOverview(year: number, center_id?: number) {
@@ -189,13 +239,13 @@ export class PaymentService {
     return result;
   }
 
-  async getTotalDebt(center_id?: number) {
+  async getTotalDebt(month?: number, year?: number, center_id?: number) {
     const now = new Date();
-    const month = now.getMonth() + 1;
-    const year = now.getFullYear();
-    const overview = await this.getStudentsOverview(month, year, center_id);
+    const m = month || now.getMonth() + 1;
+    const y = year || now.getFullYear();
+    const overview = await this.getStudentsOverview(m, y, center_id);
     const totalDebt = overview.reduce((sum: number, item: any) => sum + (item.debt || 0), 0);
-    const debtorsCount = overview.filter((item: any) => (item.debt || 0) > 0).length;
+    const debtorsCount = overview.filter((item: any) => item.status !== 'paid').length;
     return { total_debt: totalDebt, debtors_count: debtorsCount, total_students: overview.length };
   }
 

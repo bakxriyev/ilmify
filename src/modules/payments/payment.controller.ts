@@ -59,9 +59,11 @@ export class PaymentController {
   }
 
   @Get('total-debt')
-  @ApiOperation({ summary: 'Jami qarzdorlik (joriy oy)' })
-  getTotalDebt(@Req() req?: any) {
-    return this.service.getTotalDebt(req?.center_id);
+  @ApiOperation({ summary: 'Jami qarzdorlik' })
+  @ApiQuery({ name: 'month', required: false })
+  @ApiQuery({ name: 'year', required: false })
+  getTotalDebt(@Query('month') month?: string, @Query('year') year?: string, @Req() req?: any) {
+    return this.service.getTotalDebt(month ? Number(month) : undefined, year ? Number(year) : undefined, req?.center_id);
   }
 
   @Get('students-overview')

@@ -73,6 +73,13 @@ export class PaymentController {
     return this.service.getYearOverview(Number(year), req?.center_id);
   }
 
+  @Get('monthly-income')
+  @ApiOperation({ summary: 'Oylik tushum (oyma-oy summa)' })
+  @ApiQuery({ name: 'year', required: true })
+  getMonthlyIncome(@Query('year') year: string, @Req() req?: any) {
+    return this.service.getMonthlyIncome(Number(year), req?.center_id);
+  }
+
   @Get('students/:id')
   @ApiOperation({ summary: "Student to'lovlari" })
   findByStudent(@Param('id') id: string) {

@@ -176,6 +176,19 @@ export class PaymentService {
     return months;
   }
 
+  async getMonthlyIncome(year: number, center_id?: number) {
+    const where: any = { year, status: PaymentStatus.PAID };
+    if (center_id) where['$group.center_id$'] = center_id;
+    const payments = await this.paymentModel.findAll({ where, include: [{ model: GroupModel, as: 'group', attributes: [] }], raw: true });
+    const result = [];
+    for (let m = 1; m <= 12; m++) {
+      const monthly = payments.filter((p: any) => p.month === m);
+      const total = monthly.reduce((sum: number, p: any) => sum + Number(p.amount), 0);
+      result.push({ month: m, year, total });
+    }
+    return result;
+  }
+
   async findByGroup(groupId: number, month?: number, year?: number) {
     const now = new Date();
     const targetMonth = month || now.getMonth() + 1;

@@ -69,7 +69,7 @@ export class EducationCenterService implements OnModuleInit {
         email: dto.admin.email,
         phone_number: dto.admin.phone_number,
         password: hashed,
-        role: 'admin',
+        role: 'director',
         center_id: center.id,
       });
     }

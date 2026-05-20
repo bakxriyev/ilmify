@@ -3,6 +3,7 @@ import { EducationCenterModel } from '../../education-centers/entities/education
 
 export enum AdminRole {
   SUPER_ADMIN = 'super_admin',
+  DIRECTOR = 'director',
   ADMIN = 'admin',
 }
 
@@ -31,6 +32,9 @@ export class AdminModel extends Model {
 
   @Column({ type: DataType.ENUM(...Object.values(AdminRole)), defaultValue: AdminRole.ADMIN })
   role: AdminRole;
+
+  @Column({ type: DataType.TEXT, allowNull: true })
+  permissions: string;
 
   @ForeignKey(() => EducationCenterModel)
   @Column({ type: DataType.BIGINT, allowNull: true })

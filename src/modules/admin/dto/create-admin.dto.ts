@@ -1,4 +1,4 @@
-import { IsString, IsEmail, IsNotEmpty, IsOptional, MinLength, IsPhoneNumber, IsEnum } from 'class-validator';
+import { IsString, IsEmail, IsNotEmpty, IsOptional, MinLength, IsPhoneNumber, IsEnum, IsNumber } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AdminRole } from '../model/admin.entity';
 
@@ -38,7 +38,7 @@ export class CreateAdminDto {
   photo?: string;
 
   @ApiProperty({ 
-    description: 'Telefon raqam (+998 XX XXX XX XX)', 
+    description: 'Telefon raqam (+998 XXX XX XX XX)', 
     example: '+998901234567' 
   })
   @IsString()
@@ -49,10 +49,18 @@ export class CreateAdminDto {
   @ApiPropertyOptional({
     description: 'Admin roli',
     example: 'admin',
-    enum: ['admin', 'super_admin'],
+    enum: ['admin', 'super_admin', 'director'],
   })
   @IsOptional()
   @IsEnum(AdminRole)
   role?: AdminRole;
+
+  @ApiPropertyOptional({
+    description: 'O\'quv markazi ID',
+    example: 1,
+  })
+  @IsOptional()
+  @IsNumber()
+  center_id?: number;
 }
 

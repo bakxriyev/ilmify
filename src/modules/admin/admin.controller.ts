@@ -9,19 +9,34 @@ import {
   ParseIntPipe,
   UseGuards,
   Request,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { UpdateAdminDto } from './dto/update-admin.dto';
+import { UpdatePermissionsDto } from './dto/update-permissions.dto';
 import { PhoneLoginDto } from './dto/login-admin.dto';
 import { ChangePasswordDto } from './dto/change-password.admin';
 import { RefreshTokenDto } from './dto/refresh-token';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import * as jwt from 'jsonwebtoken';
 
 @ApiTags('admin')
 @Controller('admin')
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
+
+  private getCurrentUser(req: any): { id: number; role: string; center_id?: number } {
+    const authHeader = req.headers?.authorization;
+    if (!authHeader) throw new UnauthorizedException('Token topilmadi');
+    const [type, token] = authHeader.split(' ');
+    if (type !== 'Bearer' || !token) throw new UnauthorizedException('Noto\'g\'ri token format');
+    const secrets = ['secret123', process.env.JWT_SECRET || 'secret123', process.env.JWT_ACCESS_SECRET || 'kamron'].filter(Boolean);
+    for (const secret of secrets) {
+      try { return jwt.verify(token, secret) as any; } catch {}
+    }
+    throw new UnauthorizedException('Noto\'g\'ri token');
+  }
 
   // POST /admin/login/phone - Phone number va password orqali login
   @ApiOperation({ summary: 'Login with phone number and password' })
@@ -64,6 +79,79 @@ export class AdminController {
   @Get('count')
   getAdminCount() {
     return this.adminService.getAdminCount();
+  }
+
+  // ============= DIRECTOR ENDPOINTS =============
+
+  // GET /admin/directors/permissions-list - Barcha mavjud ruxsatlar
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all available permissions (director only)' })
+  @Get('directors/permissions-list')
+  getPermissionsList(@Request() req) {
+    const user = this.getCurrentUser(req);
+    return this.adminService.getPermissionsList();
+  }
+
+  // GET /admin/directors/admins - Director o'z markazidagi adminlar ro'yxati
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get center admins (director only)' })
+  @Get('directors/admins')
+  async getCenterAdmins(@Request() req) {
+    const user = this.getCurrentUser(req);
+    return this.adminService.findByCenter(user.center_id);
+  }
+
+  // POST /admin/directors/admins - Director yangi admin yaratadi
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create new admin for center (director only)' })
+  @Post('directors/admins')
+  async createCenterAdmin(@Body() dto: CreateAdminDto, @Request() req) {
+    const user = this.getCurrentUser(req);
+    return this.adminService.createCenterAdmin(dto, user.center_id);
+  }
+
+  // GET /admin/directors/admins/:id - Admin ma'lumotlari
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get admin details (director only)' })
+  @Get('directors/admins/:id')
+  async getCenterAdmin(@Param('id', ParseIntPipe) id: number, @Request() req) {
+    const user = this.getCurrentUser(req);
+    const admin = await this.adminService.findOne(id);
+    if (admin.center_id !== user.center_id) throw new UnauthorizedException('Siz faqat o\'z markazingiz adminlarini ko\'ra olasiz');
+    return admin;
+  }
+
+  // PATCH /admin/directors/admins/:id - Admin ma'lumotlarini yangilash
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update admin (director only)' })
+  @Patch('directors/admins/:id')
+  async updateCenterAdmin(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdateAdminDto, @Request() req) {
+    const user = this.getCurrentUser(req);
+    const admin = await this.adminService.findOne(id);
+    if (admin.center_id !== user.center_id) throw new UnauthorizedException('Siz faqat o\'z markazingiz adminlarini tahrirlay olasiz');
+    return this.adminService.updateAdmin(id, dto);
+  }
+
+  // PATCH /admin/directors/admins/:id/permissions - Admin ruxsatlarini yangilash
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update admin permissions (director only)' })
+  @Patch('directors/admins/:id/permissions')
+  async updateAdminPermissions(@Param('id', ParseIntPipe) id: number, @Body() dto: UpdatePermissionsDto, @Request() req) {
+    const user = this.getCurrentUser(req);
+    const admin = await this.adminService.findOne(id);
+    if (admin.center_id !== user.center_id) throw new UnauthorizedException('Siz faqat o\'z markazingiz adminlarining ruxsatlarini o\'zgartira olasiz');
+    return this.adminService.updatePermissions(id, dto);
+  }
+
+  // DELETE /admin/directors/admins/:id - Adminni o'chirish
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete admin (director only)' })
+  @Delete('directors/admins/:id')
+  async deleteCenterAdmin(@Param('id', ParseIntPipe) id: number, @Request() req) {
+    const user = this.getCurrentUser(req);
+    const admin = await this.adminService.findOne(id);
+    if (admin.center_id !== user.center_id) throw new UnauthorizedException('Siz faqat o\'z markazingiz adminlarini o\'chira olasiz');
+    return this.adminService.remove(id);
   }
 
   // GET /admin/profile - Joriy admin profil ma'lumotlari

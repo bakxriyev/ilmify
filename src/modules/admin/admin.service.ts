@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException, UnauthorizedException, Inject, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, UnauthorizedException, Inject, ForbiddenException, BadRequestException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
@@ -10,6 +10,7 @@ import { CreateAdminDto } from './dto/create-admin.dto';
 import { UpdateAdminDto } from './dto/update-admin.dto';
 import { PhoneLoginDto } from './dto/login-admin.dto';
 import { ChangePasswordDto } from './dto/change-password.admin';
+import { UpdatePermissionsDto } from './dto/update-permissions.dto';
 
 @Injectable()
 export class AdminService {
@@ -22,8 +23,13 @@ export class AdminService {
 
   // Barcha adminlarni olish
   async findAll() {
-    return await this.adminModel.findAll({
+    const admins = await this.adminModel.findAll({
       attributes: { exclude: ['password', 'refresh_token'] },
+    });
+    return admins.map(a => {
+      const json = a.toJSON() as any;
+      json.permissions = this.parsePermissions(json.permissions);
+      return json;
     });
   }
 
@@ -37,7 +43,9 @@ export class AdminService {
       throw new NotFoundException(`Admin with ID ${id} not found`);
     }
 
-    return admin;
+    const json = admin.toJSON() as any;
+    json.permissions = this.parsePermissions(json.permissions);
+    return json;
   }
 
   // Email bo'yicha admin topish
@@ -82,9 +90,9 @@ export class AdminService {
     return { access_token, refresh_token };
   }
 
-  // Yangi admin yaratish
+  // Yangi admin yaratish (super admin uchun)
   async create(createAdminDto: CreateAdminDto) {
-    return this.createAdmin(createAdminDto, createAdminDto.role || AdminRole.ADMIN);
+    return this.createAdmin(createAdminDto, createAdminDto.role || AdminRole.ADMIN, createAdminDto.center_id);
   }
 
   async setupSuperAdmin(dto: CreateAdminDto) {
@@ -93,7 +101,7 @@ export class AdminService {
     return this.createAdmin(dto, AdminRole.SUPER_ADMIN);
   }
 
-  private async createAdmin(createAdminDto: CreateAdminDto, role: AdminRole) {
+  private async createAdmin(createAdminDto: CreateAdminDto, role: AdminRole, center_id?: number) {
     const existingAdminByEmail = await this.findByEmail(createAdminDto.email);
     if (existingAdminByEmail) throw new ConflictException('Admin with this email already exists');
 
@@ -102,15 +110,85 @@ export class AdminService {
 
     const hashedPassword = await bcrypt.hash(createAdminDto.password, 10);
 
+    const defaultPermissions = role === AdminRole.ADMIN
+      ? JSON.stringify({ dashboard: false, students: false, teachers: false, parents: false, groups: false, rooms: false, payments: false, crm: false, notifications: false })
+      : null;
+
     const admin = await this.adminModel.create({
       ...createAdminDto,
       password: hashedPassword,
       role,
+      center_id: center_id || createAdminDto.center_id || null,
+      permissions: defaultPermissions,
       last_login: null,
     });
 
     const { password, refresh_token, ...adminWithoutPassword } = admin.toJSON();
-    return adminWithoutPassword;
+    return { ...adminWithoutPassword, permissions: this.parsePermissions(adminWithoutPassword.permissions) };
+  }
+
+  private parsePermissions(permissions: string | null): Record<string, boolean> | null {
+    if (!permissions) return null;
+    try { return JSON.parse(permissions); }
+    catch { return null; }
+  }
+
+  // Director - o'z markazidagi adminlarni olish
+  async findByCenter(center_id: number) {
+    const admins = await this.adminModel.findAll({
+      where: { center_id, role: AdminRole.ADMIN },
+      attributes: { exclude: ['password', 'refresh_token'] },
+    });
+    return admins.map(a => {
+      const json = a.toJSON() as any;
+      json.permissions = this.parsePermissions(json.permissions);
+      return json;
+    });
+  }
+
+  // Director - yangi admin yaratish (markazga biriktirilgan)
+  async createCenterAdmin(createAdminDto: CreateAdminDto, center_id: number) {
+    const existing = await this.adminModel.findOne({ where: { phone_number: createAdminDto.phone_number } });
+    if (existing) throw new ConflictException('Bu telefon raqam bilan admin allaqachon mavjud');
+    return this.createAdmin(createAdminDto, AdminRole.ADMIN, center_id);
+  }
+
+  // Director - admin ruxsatlarini yangilash
+  async updatePermissions(id: number, dto: UpdatePermissionsDto) {
+    const admin = await this.adminModel.findByPk(id);
+    if (!admin) throw new NotFoundException('Admin topilmadi');
+    if (admin.role !== AdminRole.ADMIN) throw new BadRequestException('Faqat adminlar ruxsatlarini o\'zgartirish mumkin');
+    await admin.update({ permissions: JSON.stringify(dto.permissions) });
+    const updated = admin.toJSON() as any;
+    return { ...updated, permissions: dto.permissions };
+  }
+
+  // Administrator ma'lumotlarini yangilash (director o'z adminlarini)
+  async updateAdmin(id: number, updateAdminDto: UpdateAdminDto) {
+    const admin = await this.adminModel.findByPk(id);
+    if (!admin) throw new NotFoundException('Admin topilmadi');
+    if (admin.role !== AdminRole.ADMIN) throw new BadRequestException('Faoliyat ko\'rsatilmagan');
+    if (updateAdminDto.password) {
+      updateAdminDto.password = await bcrypt.hash(updateAdminDto.password, 10);
+    }
+    await admin.update(updateAdminDto);
+    const { password, refresh_token, ...rest } = admin.toJSON();
+    return { ...rest, permissions: this.parsePermissions((rest as any).permissions) };
+  }
+
+  // Barcha mavjud ruxsatlar ro'yxati
+  getPermissionsList() {
+    return [
+      { key: 'dashboard', label: 'Dashboard' },
+      { key: 'students', label: 'Studentlar' },
+      { key: 'teachers', label: "O'qituvchilar" },
+      { key: 'parents', label: 'Ota-onalar' },
+      { key: 'groups', label: 'Guruhlar' },
+      { key: 'rooms', label: 'Xonalar' },
+      { key: 'payments', label: "To'lovlar" },
+      { key: 'crm', label: 'CRM' },
+      { key: 'notifications', label: 'Bildirishnomalar' },
+    ];
   }
 
   // Admin ma'lumotlarini yangilash
@@ -146,7 +224,7 @@ export class AdminService {
     
     // Parolni response'dan olib tashlash
     const { password, refresh_token, ...adminWithoutPassword } = admin.toJSON();
-    return adminWithoutPassword;
+    return { ...adminWithoutPassword, permissions: this.parsePermissions((adminWithoutPassword as any).permissions) };
   }
 
   // Adminni o'chirish
@@ -217,6 +295,7 @@ export class AdminService {
         ...adminWithoutPassword,
         role: admin.role || 'admin',
         center_id: admin.center_id,
+        permissions: this.parsePermissions(adminWithoutPassword.permissions),
         center: center ? {
           id: center.id,
           name: center.name,
@@ -318,6 +397,13 @@ export class AdminService {
       throw new NotFoundException(`Admin with ID ${id} not found`);
     }
 
-    return admin;
+    const json = admin.toJSON() as any;
+    json.permissions = this.parsePermissions(json.permissions);
+    return json;
+  }
+
+  // Jami adminlar sonini olish (director uchun - faqat o'z markazidagilar)
+  async getCenterAdminCount(center_id: number) {
+    return this.adminModel.count({ where: { center_id, role: AdminRole.ADMIN } });
   }
 }

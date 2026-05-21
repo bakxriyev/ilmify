@@ -330,9 +330,24 @@ export class TelegramBotService {
   }
 
   async verifyPassword(centerId: number, phone_number: string, password: string): Promise<{ success: boolean; student?: any }> {
-    const student = await this.getStudentByPhone(centerId, phone_number);
-    if (!student || student.password !== password) return { success: false };
-    return { success: true, student: student.toJSON() };
+    try {
+      const student = await this.studentModel.findOne({
+        where: { phone_number: String(phone_number).trim(), center_id: centerId },
+        attributes: ['id', 'first_name', 'last_name', 'phone_number', 'center_id', 'password'],
+        raw: true,
+      });
+      if (!student) {
+        return { success: false };
+      }
+      if (String(student.password) !== String(password)) {
+        return { success: false };
+      }
+      const { password: _, ...safe } = student;
+      return { success: true, student: safe };
+    } catch (err) {
+      console.error('verifyPassword error:', err);
+      return { success: false };
+    }
   }
 
   async checkPhone(centerId: number, phone: string): Promise<{ exists: boolean; student?: any }> {

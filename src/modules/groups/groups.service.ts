@@ -1,13 +1,14 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/sequelize';
+import { InjectModel, InjectConnection } from '@nestjs/sequelize';
 import { GroupModel } from './model/group.entity';
 import { TeacherModel } from '../teachers/model/teacher.model';
 import { LevelModel } from '../level/model/level.entity';
-import { StudentModel } from '../students/model/student.entity';
 import { GroupStudentModel } from 'src/modules/group_student_model';
+import { StudentModel } from '../students/model/student.entity';
 import { CreateGroupDto, UpdateGroupDto } from './dto';
 import { QueryGroupDto } from './dto/query-group.dto';
 import { Op } from 'sequelize';
+import { Sequelize } from 'sequelize-typescript';
 import { GroupLessonModel } from '../group-lesson/entities/group-lesson.entity'
 import { ChatRoomModel, ChatRoomType } from '../chat/entities/chat-room.entity';
 import { RoomModel } from '../rooms/entities/room.entity';
@@ -40,8 +41,8 @@ export class GroupService {
     @InjectModel(RoomModel)
     private readonly roomModel: typeof RoomModel,
 
-    @InjectModel(StudentModel)
-    private readonly studentModel: typeof StudentModel,
+    @InjectConnection()
+    private readonly sequelize: Sequelize,
 
   ) {}
 
@@ -255,10 +256,10 @@ async create(createGroupDto: CreateGroupDto, center_id?: number): Promise<GroupM
     const group = await this.groupModel.findByPk(groupId);
     if (!group) throw new NotFoundException('Group not found');
 
-    // Studentlarni guruhdan chiqazish (group_id = null)
-    await this.studentModel.update(
-      { group_id: null },
-      { where: { group_id: groupId } },
+    // Studentlarni guruhdan chiqazish (group_id = null) — raw SQL orqali model sirkulyar dependency oldini olish uchun
+    await this.sequelize.query(
+      'UPDATE students SET group_id = NULL WHERE group_id = :groupId',
+      { replacements: { groupId } },
     );
 
     // Attendance yozuvlarini o'chirish

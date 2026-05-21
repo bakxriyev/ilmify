@@ -98,8 +98,8 @@ export class StudentController {
     status: HttpStatus.CREATED,
     description: 'Studentlar yaratildi',
   })
-  async bulkCreate(@Body() bulkCreateDto: BulkCreateStudentDto) {
-    return await this.studentService.bulkCreate(bulkCreateDto);
+  async bulkCreate(@Body() bulkCreateDto: BulkCreateStudentDto, @Req() req?: any) {
+    return await this.studentService.bulkCreate(bulkCreateDto, req?.center_id);
   }
 
  @Get()

@@ -71,12 +71,20 @@ export class StudentService {
 
   // ================= CREATE =================
   async create(createDto: CreateStudentDto, center_id?: number) {
+    const createData = { ...createDto };
+    if (!createData.email) createData.email = undefined;
+    if (!createData.phone_number) createData.phone_number = undefined;
+
     const orConditions: any[] = [];
-    if (createDto.phone_number) {
-      orConditions.push({ phone_number: createDto.phone_number });
+    const centerFilter: any = {};
+    if (center_id) {
+      centerFilter.center_id = center_id;
     }
-    if (createDto.email) {
-      orConditions.push({ email: createDto.email });
+    if (createData.phone_number) {
+      orConditions.push({ phone_number: createData.phone_number, ...centerFilter });
+    }
+    if (createData.email) {
+      orConditions.push({ email: createData.email, ...centerFilter });
     }
     if (orConditions.length > 0) {
       const existingStudent = await this.studentModel.findOne({
@@ -84,9 +92,9 @@ export class StudentService {
       });
 
       if (existingStudent) {
-        if (createDto.phone_number && existingStudent.phone_number === createDto.phone_number)
+        if (createData.phone_number && existingStudent.phone_number === createData.phone_number)
           throw new ConflictException('Bu telefon nomer bilan student allaqachon mavjud');
-        if (createDto.email && existingStudent.email === createDto.email)
+        if (createData.email && existingStudent.email === createData.email)
           throw new ConflictException('Bu email bilan student allaqachon mavjud');
       }
     }
@@ -99,6 +107,8 @@ export class StudentService {
 
     const student = await this.studentModel.create({
       ...studentData,
+      email: createData.email,
+      phone_number: createData.phone_number,
       password: createDto.password,
       center_id: center_id || null,
     });
@@ -131,13 +141,13 @@ export class StudentService {
   }
 
   // ================= BULK CREATE =================
-  async bulkCreate(bulkCreateDto: BulkCreateStudentDto) {
+  async bulkCreate(bulkCreateDto: BulkCreateStudentDto, center_id?: number) {
     const createdStudents = [];
     const errors = [];
 
     for (let i = 0; i < bulkCreateDto.students.length; i++) {
       try {
-        const student = await this.create(bulkCreateDto.students[i]);
+        const student = await this.create(bulkCreateDto.students[i], center_id);
         createdStudents.push(student);
       } catch (error) {
         errors.push({

@@ -42,6 +42,11 @@ export class TelegramAuthController {
     return this.telegramService.getStudentProfile(Number(id));
   }
 
+  @Get('student/:id/group')
+  async getStudentGroup(@Param('id') id: string) {
+    return this.telegramService.getStudentGroup(Number(id));
+  }
+
   @Get('student/:id/payments')
   async getStudentPayments(@Param('id') id: string, @Query('limit') limit?: string) {
     return this.telegramService.getStudentPayments(Number(id), limit ? Number(limit) : 20);

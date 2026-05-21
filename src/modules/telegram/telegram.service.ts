@@ -58,6 +58,24 @@ export class TelegramService {
     return { bot_token: settings.bot_token, channel_usernames: channels };
   }
 
+  private groupInclude = [
+    { model: GroupModel, attributes: ['id', 'name'], required: false },
+    {
+      model: GroupStudentModel,
+      as: 'group_students',
+      required: false,
+      include: [{ model: GroupModel, as: 'group', attributes: ['id', 'name'] }],
+    },
+  ];
+
+  private resolveGroup(json: any): any {
+    if (!json.group && json.group_students && json.group_students.length > 0) {
+      json.group = json.group_students[0].group;
+    }
+    delete json.group_students;
+    return json;
+  }
+
   async authByPhone(phone_number: string): Promise<{ exists: boolean; student?: any }> {
     const student = await this.studentModel.findOne({
       where: { phone_number },
@@ -71,38 +89,35 @@ export class TelegramService {
     const student = await this.studentModel.findOne({
       where: { phone_number, password },
       attributes: ['id', 'first_name', 'last_name', 'phone_number', 'email', 'age', 'isActive', 'center_id'],
-      include: [
-        { model: GroupModel, attributes: ['id', 'name'], required: false },
-        { model: GroupStudentModel, as: 'group_students', required: false, include: [{ model: GroupModel, as: 'group', attributes: ['id', 'name'] }] },
-      ],
+      include: this.groupInclude,
     });
     if (!student) return { success: false };
 
     const json = student.toJSON();
-    if (!json.group && json.group_students && json.group_students.length > 0) {
-      json.group = json.group_students[0].group;
-    }
-    delete json.group_students;
-    return { success: true, student: json };
+    return { success: true, student: this.resolveGroup(json) };
   }
 
   async getStudentProfile(studentId: number): Promise<any> {
     const student = await this.studentModel.findOne({
       where: { id: studentId },
       attributes: ['id', 'first_name', 'last_name', 'phone_number', 'email', 'age', 'isActive'],
-      include: [
-        { model: GroupModel, attributes: ['id', 'name'], required: false },
-        { model: GroupStudentModel, as: 'group_students', required: false, include: [{ model: GroupModel, as: 'group', attributes: ['id', 'name'] }] },
-      ],
+      include: this.groupInclude,
     });
     if (!student) throw new NotFoundException('Student topilmadi');
 
-    const json = student.toJSON();
-    if (!json.group && json.group_students && json.group_students.length > 0) {
-      json.group = json.group_students[0].group;
-    }
-    delete json.group_students;
-    return json;
+    return this.resolveGroup(student.toJSON());
+  }
+
+  async getStudentGroup(studentId: number): Promise<any> {
+    const student = await this.studentModel.findOne({
+      where: { id: studentId },
+      attributes: ['id'],
+      include: this.groupInclude,
+    });
+    if (!student) throw new NotFoundException('Student topilmadi');
+
+    const resolved = this.resolveGroup(student.toJSON());
+    return resolved.group || null;
   }
 
   async getStudentPayments(studentId: number, limit: number = 20): Promise<any[]> {
@@ -134,7 +149,6 @@ export class TelegramService {
       where: { student_id: studentId },
       include: [{ model: ParentModel, as: 'parent', attributes: ['id', 'first_name', 'last_name', 'phone_number'] }],
     });
-    const parents = links.map(l => l.parent).filter(Boolean);
-    return parents;
+    return links.map(l => l.parent).filter(Boolean);
   }
 }

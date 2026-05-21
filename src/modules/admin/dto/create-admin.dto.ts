@@ -31,7 +31,7 @@ export class CreateAdminDto {
 
   @ApiPropertyOptional({ 
     description: 'Profil rasmi URL', 
-    example: 'https://api.ilmify-edu.uz/photo.jpg' 
+    example: 'https://api.ilmify-edu.uz/photo' 
   })
   @IsString()
   @IsOptional()

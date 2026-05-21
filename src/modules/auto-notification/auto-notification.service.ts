@@ -103,7 +103,7 @@ export class AutoNotificationService {
 
     const allStudentIds = [...new Set(unpaidPayments.map(p => Number(p.student_id)))];
     const students = await this.studentModel.findAll({
-      where: { id: allStudentIds, isActive: true },
+      where: { id: allStudentIds, center_id: centerId, isActive: true },
     });
 
     if (students.length === 0) {
@@ -151,7 +151,7 @@ export class AutoNotificationService {
       const messageText = this.replacePlaceholders(template, studentJson, groupName, summa);
 
       const chat = await this.chatModel.findOne({
-        where: { student_id: sid },
+        where: { student_id: sid, center_id: centerId },
       });
 
       let telegramSent = false;

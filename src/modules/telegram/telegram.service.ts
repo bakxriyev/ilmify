@@ -77,7 +77,7 @@ export class TelegramService {
   async getStudentProfile(studentId: number): Promise<any> {
     const student = await this.studentModel.findOne({
       where: { id: studentId },
-      attributes: ['id', 'first_name', 'last_name', 'phone_number', 'email', 'age', 'isActive', 'created_at'],
+      attributes: ['id', 'first_name', 'last_name', 'phone_number', 'email', 'age', 'isActive'],
       include: [{ model: GroupModel, attributes: ['id', 'name'], required: false }],
     });
     if (!student) throw new NotFoundException('Student topilmadi');
@@ -108,7 +108,7 @@ export class TelegramService {
   async getStudentParents(studentId: number): Promise<any[]> {
     const links = await this.parentStudentModel.findAll({
       where: { student_id: studentId },
-      include: [{ model: ParentModel, attributes: ['id', 'first_name', 'last_name', 'phone_number'] }],
+      include: [{ model: ParentModel, as: 'parent', attributes: ['id', 'first_name', 'last_name', 'phone_number'] }],
     });
     return links.map(l => l.parent).filter(Boolean);
   }

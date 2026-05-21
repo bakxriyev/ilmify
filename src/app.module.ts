@@ -68,6 +68,12 @@ import { TariffModule } from './modules/tariffs/tariff.module';
 import { TariffModel } from './modules/tariffs/entities/tariff.entity';
 import { TelegramModule } from './modules/telegram/telegram.module';
 import { TelegramSettingsModel } from './modules/telegram/entities/telegram-settings.entity';
+import { TelegramBotModule } from './modules/telegram-bot/telegram-bot.module';
+import { TelegramBotModel } from './modules/telegram-bot/entities/telegram-bot.entity';
+import { TelegramChatModel } from './modules/telegram-bot/entities/telegram-chat.entity';
+import { TelegramMessageModel } from './modules/telegram-bot/entities/telegram-message.entity';
+import { TelegramTemplateModel } from './modules/telegram-bot/entities/telegram-template.entity';
+import { TelegramBroadcastModel } from './modules/telegram-bot/entities/telegram-broadcast.entity';
 
 @Module({
   imports: [
@@ -93,7 +99,7 @@ import { TelegramSettingsModel } from './modules/telegram/entities/telegram-sett
             username: config.get<string>('databaseConfig.user'),
             password: config.get<string>('databaseConfig.password'),
             database: config.get<string>('databaseConfig.dbname'),
-            models: [TariffModel, TeacherModel,LevelModel,AdminModel,UserDeviceModel,GroupLessonModel,RedoIncorrectTaskModel, StudentModel,GroupModel,GroupStudentModel,AttendanceModel,UnitModel,ExerciseModel,TaskModel,StudentAnswerModel,ExerciseResultModel,VocabModel,VocabAnswerModel,VocabResultModel,UnitResultModel,StudentCoinsModel,TeacherCoinLogModel,TaskCoinLogModel,ChatRoomModel,ChatMessageModel,MessageStatusModel,ParentModel,ParentStudentModel,RoomModel,PaymentModel,EducationCenterModel,CenterBranchModel,LeadModel,LeadSourceModel,TelegramSettingsModel],
+            models: [TariffModel, TeacherModel,LevelModel,AdminModel,UserDeviceModel,GroupLessonModel,RedoIncorrectTaskModel, StudentModel,GroupModel,GroupStudentModel,AttendanceModel,UnitModel,ExerciseModel,TaskModel,StudentAnswerModel,ExerciseResultModel,VocabModel,VocabAnswerModel,VocabResultModel,UnitResultModel,StudentCoinsModel,TeacherCoinLogModel,TaskCoinLogModel,ChatRoomModel,ChatMessageModel,MessageStatusModel,ParentModel,ParentStudentModel,RoomModel,PaymentModel,EducationCenterModel,CenterBranchModel,LeadModel,LeadSourceModel,TelegramSettingsModel,TelegramBotModel,TelegramChatModel,TelegramMessageModel,TelegramTemplateModel,TelegramBroadcastModel],
             sync: { alter: true },
             synchronize: true,
             logging: console.log,
@@ -144,6 +150,7 @@ import { TelegramSettingsModel } from './modules/telegram/entities/telegram-sett
     TariffModule,
     EducationCenterModule,
     TelegramModule,
+    TelegramBotModule,
   ],
   controllers: [
   ],

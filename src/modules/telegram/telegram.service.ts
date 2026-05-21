@@ -68,7 +68,7 @@ export class TelegramService {
     const student = await this.studentModel.findOne({
       where: { phone_number, password },
       attributes: ['id', 'first_name', 'last_name', 'phone_number', 'email', 'age', 'isActive', 'center_id'],
-      include: [{ model: GroupModel, attributes: ['id', 'name', 'description', 'isActive'], required: false }],
+      include: [{ model: GroupModel, attributes: ['id', 'name'], required: false }],
     });
     if (!student) return { success: false };
     return { success: true, student };
@@ -78,7 +78,7 @@ export class TelegramService {
     const student = await this.studentModel.findOne({
       where: { id: studentId },
       attributes: ['id', 'first_name', 'last_name', 'phone_number', 'email', 'age', 'isActive', 'created_at'],
-      include: [{ model: GroupModel, attributes: ['id', 'name', 'description', 'isActive'], required: false }],
+      include: [{ model: GroupModel, attributes: ['id', 'name'], required: false }],
     });
     if (!student) throw new NotFoundException('Student topilmadi');
     return student;

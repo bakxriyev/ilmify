@@ -22,8 +22,15 @@ export class ParentController {
   @UseGuards(ChatAuthGuard)
   @ApiOperation({ summary: 'Barcha ota-onalar royxati' })
   @ApiQuery({ name: 'search', required: false })
-  async findAll(@Query('search') search?: string, @Req() req?: any) {
-    return this.parentService.findAll(search, req?.center_id);
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'limit', required: false })
+  async findAll(
+    @Query('search') search?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Req() req?: any,
+  ) {
+    return this.parentService.findAll(search, req?.center_id, Number(page) || 1, Number(limit) || 20);
   }
 
   @Get(':id')

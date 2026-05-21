@@ -53,7 +53,7 @@ export class ParentService {
     return { access_token, parent: { id: parent.id, first_name: parent.first_name, last_name: parent.last_name, phone_number: parent.phone_number, photo: parent.photo } };
   }
 
-  async findAll(search?: string, center_id?: number) {
+  async findAll(search?: string, center_id?: number, page: number = 1, limit: number = 20) {
     const where: any = {};
     if (center_id) where.center_id = center_id;
     if (search) {
@@ -63,13 +63,33 @@ export class ParentService {
         { phone_number: { [Op.iLike]: `%${search}%` } },
       ];
     }
-    const parents = await this.parentModel.findAll({ where, order: [['created_at', 'DESC']] });
-    const result = [];
-    for (const p of parents) {
-      const childrenCount = await this.parentStudentModel.count({ where: { parent_id: p.id } });
-      result.push({ ...p.toJSON(), children_count: childrenCount });
+    const offset = (page - 1) * limit;
+    const { count, rows } = await this.parentModel.findAndCountAll({
+      where,
+      order: [['created_at', 'DESC']],
+      limit,
+      offset,
+    });
+
+    const parentIds = rows.map(p => p.id);
+    const childrenCounts = await this.parentStudentModel.findAll({
+      where: { parent_id: parentIds },
+      attributes: ['parent_id'],
+      group: ['parent_id'],
+      raw: true,
+    }) as any[];
+
+    const countMap: Record<number, number> = {};
+    for (const row of childrenCounts) {
+      countMap[row.parent_id] = (countMap[row.parent_id] || 0) + 1;
     }
-    return result;
+
+    const data = rows.map(p => ({
+      ...p.toJSON(),
+      children_count: countMap[p.id] || 0,
+    }));
+
+    return { data, total: count, page, limit, total_pages: Math.ceil(count / limit) };
   }
 
   async findOne(id: number) {

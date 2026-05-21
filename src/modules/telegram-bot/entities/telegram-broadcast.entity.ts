@@ -2,7 +2,7 @@ import { Table, Model, Column, DataType, ForeignKey, BelongsTo, CreatedAt } from
 import { EducationCenterModel } from '../../education-centers/entities/education-center.entity';
 import { TelegramTemplateModel } from './telegram-template.entity';
 
-@Table({ tableName: 'telegram_broadcasts', timestamps: false })
+@Table({ tableName: 'telegram_broadcasts', timestamps: true, createdAt: 'created_at', updatedAt: false })
 export class TelegramBroadcastModel extends Model {
   @Column({ type: DataType.BIGINT, autoIncrement: true, primaryKey: true })
   id: number;

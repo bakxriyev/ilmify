@@ -277,6 +277,7 @@ export class TelegramBotService {
     });
   }
 
+  // ─── Auth ─────────────────────────────────────────────────
   async getStudentByPhone(phone_number: string): Promise<StudentModel | null> {
     return this.studentModel.findOne({
       where: { phone_number },
@@ -288,5 +289,113 @@ export class TelegramBotService {
     const student = await this.getStudentByPhone(phone_number);
     if (!student || student.password !== password) return { success: false };
     return { success: true, student: student.toJSON() };
+  }
+
+  async checkPhone(centerId: number, phone: string): Promise<{ exists: boolean; student?: any }> {
+    const student = await this.studentModel.findOne({
+      where: { phone_number: phone, center_id: centerId },
+      attributes: ['id', 'first_name', 'last_name', 'center_id'],
+    });
+    if (!student) return { exists: false };
+    return { exists: true, student: student.toJSON() };
+  }
+
+  async getChatStatus(centerId: number, chatId: number): Promise<{ authenticated: boolean; student?: any }> {
+    const chat = await this.chatModel.findOne({
+      where: { center_id: centerId, chat_id: chatId },
+    });
+    if (!chat || !chat.student_id) return { authenticated: false };
+    const student = await this.studentModel.findByPk(chat.student_id, {
+      attributes: ['id', 'first_name', 'last_name'],
+    });
+    return { authenticated: true, student: student?.toJSON() || null };
+  }
+
+  async linkStudent(centerId: number, data: {
+    chat_id: number; student_id: number; first_name?: string; last_name?: string; username?: string;
+  }): Promise<void> {
+    await this.chatModel.upsert({
+      center_id: centerId,
+      chat_id: data.chat_id,
+      student_id: data.student_id,
+      first_name: data.first_name || '',
+      last_name: data.last_name || '',
+      username: data.username || '',
+      is_active: true,
+    });
+  }
+
+  // ─── Student Info ─────────────────────────────────────────
+  async getStudentProfile(centerId: number, studentId: number): Promise<any> {
+    const student = await this.studentModel.findByPk(studentId, {
+      attributes: ['id', 'first_name', 'last_name', 'phone_number', 'center_id'],
+    });
+    if (!student) throw new NotFoundException('Student topilmadi');
+    const s = student.toJSON();
+
+    let group_name = '';
+    let center_name = '';
+    try {
+      const groupStudent = await (this.studentModel as any).sequelize?.models?.GroupStudentModel?.findOne({
+        where: { student_id: studentId },
+        include: [{ model: (this.studentModel as any).sequelize?.models?.GroupModel, attributes: ['name'] }],
+      });
+      if (groupStudent?.group) group_name = groupStudent.group.name;
+    } catch { }
+
+    try {
+      const center = await (this.studentModel as any).sequelize?.models?.EducationCenterModel?.findByPk(centerId, {
+        attributes: ['name'],
+      });
+      if (center) center_name = center.name;
+    } catch { }
+
+    return { ...s, group_name, center_name };
+  }
+
+  async getStudentPayments(centerId: number, studentId: number): Promise<any[]> {
+    try {
+      const pmtModel = (this.studentModel as any).sequelize?.models?.PaymentModel;
+      if (!pmtModel) return [];
+      const payments = await pmtModel.findAll({
+        where: { student_id: studentId },
+        order: [['created_at', 'DESC']],
+        limit: 20,
+      });
+      return payments.map((p: any) => p.toJSON());
+    } catch {
+      return [];
+    }
+  }
+
+  async getStudentGroups(centerId: number, studentId: number): Promise<any[]> {
+    try {
+      const gsModel = (this.studentModel as any).sequelize?.models?.GroupStudentModel;
+      if (!gsModel) return [];
+      const gs = await gsModel.findAll({
+        where: { student_id: studentId },
+        include: [{ model: (this.studentModel as any).sequelize?.models?.GroupModel, attributes: ['name'] }],
+      });
+      return gs.map((g: any) => ({
+        group_name: g.group?.name || '',
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  async getStudentGrades(centerId: number, studentId: number): Promise<any[]> {
+    try {
+      const gradeModel = (this.studentModel as any).sequelize?.models?.GradeModel;
+      if (!gradeModel) return [];
+      const grades = await gradeModel.findAll({
+        where: { student_id: studentId },
+        order: [['created_at', 'DESC']],
+        limit: 50,
+      });
+      return grades.map((g: any) => g.toJSON());
+    } catch {
+      return [];
+    }
   }
 }

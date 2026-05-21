@@ -22,6 +22,50 @@ export class TelegramBotController {
     return this.service.handleIncomingMessage(Number(centerId), body);
   }
 
+  @Get(':centerId/chat-status/:chatId')
+  async getChatStatus(@Param('centerId') centerId: string, @Param('chatId') chatId: string) {
+    return this.service.getChatStatus(Number(centerId), Number(chatId));
+  }
+
+  @Post(':centerId/check-phone')
+  async checkPhone(@Param('centerId') centerId: string, @Body() body: { phone: string }) {
+    return this.service.checkPhone(Number(centerId), body.phone);
+  }
+
+  @Post(':centerId/verify-password')
+  async verifyPassword(@Param('centerId') centerId: string, @Body() body: { phone: string; password: string }) {
+    return this.service.verifyPassword(body.phone, body.password);
+  }
+
+  @Post(':centerId/link-student')
+  async linkStudent(@Param('centerId') centerId: string, @Body() body: {
+    chat_id: number; student_id: number; first_name?: string; last_name?: string; username?: string;
+  }) {
+    return this.service.linkStudent(Number(centerId), body);
+  }
+
+  @Get(':centerId/student-profile/:studentId')
+  async getStudentProfile(@Param('centerId') centerId: string, @Param('studentId') studentId: string) {
+    return this.service.getStudentProfile(Number(centerId), Number(studentId));
+  }
+
+  @Get(':centerId/student-payments/:studentId')
+  async getStudentPayments(@Param('centerId') centerId: string, @Param('studentId') studentId: string) {
+    return this.service.getStudentPayments(Number(centerId), Number(studentId));
+  }
+
+  @Get(':centerId/student-groups/:studentId')
+  async getStudentGroups(@Param('centerId') centerId: string, @Param('studentId') studentId: string) {
+    return this.service.getStudentGroups(Number(centerId), Number(studentId));
+  }
+
+  @Get(':centerId/student-grades/:studentId')
+  async getStudentGrades(@Param('centerId') centerId: string, @Param('studentId') studentId: string) {
+    return this.service.getStudentGrades(Number(centerId), Number(studentId));
+  }
+
+  // ─── Config ─────────────────────────────────────────────
+
   @Get(':centerId/config')
   async getConfig(@Param('centerId') centerId: string) {
     return this.service.getBotConfig(Number(centerId));
@@ -32,10 +76,14 @@ export class TelegramBotController {
     return this.service.updateBotConfig(Number(centerId), body);
   }
 
+  // ─── Chats ──────────────────────────────────────────────
+
   @Get(':centerId/chats')
   async getChats(@Param('centerId') centerId: string, @Query('search') search?: string) {
     return this.service.getChats(Number(centerId), search);
   }
+
+  // ─── Inbox ──────────────────────────────────────────────
 
   @Get(':centerId/inbox')
   async getInbox(@Param('centerId') centerId: string, @Query('search') search?: string) {
@@ -46,6 +94,8 @@ export class TelegramBotController {
   async sendReply(@Param('centerId') centerId: string, @Body() body: { chat_id: number; text: string }) {
     return this.service.sendReply(Number(centerId), body.chat_id, body.text);
   }
+
+  // ─── Templates ──────────────────────────────────────────
 
   @Get(':centerId/templates')
   async getTemplates(@Param('centerId') centerId: string) {
@@ -67,6 +117,8 @@ export class TelegramBotController {
     return this.service.deleteTemplate(Number(id));
   }
 
+  // ─── Broadcasts ─────────────────────────────────────────
+
   @Get(':centerId/broadcasts')
   async getBroadcasts(@Param('centerId') centerId: string) {
     return this.service.getBroadcasts(Number(centerId));
@@ -74,10 +126,7 @@ export class TelegramBotController {
 
   @Post(':centerId/send')
   async sendMessage(@Param('centerId') centerId: string, @Body() body: {
-    target_type: string;
-    target_id?: number;
-    text: string;
-    template_id?: number;
+    target_type: string; target_id?: number; text: string; template_id?: number;
   }) {
     if (!body.text) body.text = '';
     return this.service.sendMessage(Number(centerId), body);

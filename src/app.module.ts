@@ -74,6 +74,9 @@ import { TelegramChatModel } from './modules/telegram-bot/entities/telegram-chat
 import { TelegramMessageModel } from './modules/telegram-bot/entities/telegram-message.entity';
 import { TelegramTemplateModel } from './modules/telegram-bot/entities/telegram-template.entity';
 import { TelegramBroadcastModel } from './modules/telegram-bot/entities/telegram-broadcast.entity';
+import { AutoNotificationModule } from './modules/auto-notification/auto-notification.module';
+import { AutoNotificationConfigModel } from './modules/auto-notification/entities/auto-notification-config.entity';
+import { AutoNotificationLogModel } from './modules/auto-notification/entities/auto-notification-log.entity';
 
 @Module({
   imports: [
@@ -99,7 +102,7 @@ import { TelegramBroadcastModel } from './modules/telegram-bot/entities/telegram
             username: config.get<string>('databaseConfig.user'),
             password: config.get<string>('databaseConfig.password'),
             database: config.get<string>('databaseConfig.dbname'),
-            models: [TariffModel, TeacherModel,LevelModel,AdminModel,UserDeviceModel,GroupLessonModel,RedoIncorrectTaskModel, StudentModel,GroupModel,GroupStudentModel,AttendanceModel,UnitModel,ExerciseModel,TaskModel,StudentAnswerModel,ExerciseResultModel,VocabModel,VocabAnswerModel,VocabResultModel,UnitResultModel,StudentCoinsModel,TeacherCoinLogModel,TaskCoinLogModel,ChatRoomModel,ChatMessageModel,MessageStatusModel,ParentModel,ParentStudentModel,RoomModel,PaymentModel,EducationCenterModel,CenterBranchModel,LeadModel,LeadSourceModel,TelegramSettingsModel,TelegramBotModel,TelegramChatModel,TelegramMessageModel,TelegramTemplateModel,TelegramBroadcastModel],
+            models: [TariffModel, TeacherModel,LevelModel,AdminModel,UserDeviceModel,GroupLessonModel,RedoIncorrectTaskModel, StudentModel,GroupModel,GroupStudentModel,AttendanceModel,UnitModel,ExerciseModel,TaskModel,StudentAnswerModel,ExerciseResultModel,VocabModel,VocabAnswerModel,VocabResultModel,UnitResultModel,StudentCoinsModel,TeacherCoinLogModel,TaskCoinLogModel,ChatRoomModel,ChatMessageModel,MessageStatusModel,ParentModel,ParentStudentModel,RoomModel,PaymentModel,EducationCenterModel,CenterBranchModel,LeadModel,LeadSourceModel,TelegramSettingsModel,TelegramBotModel,TelegramChatModel,TelegramMessageModel,TelegramTemplateModel,TelegramBroadcastModel,AutoNotificationConfigModel,AutoNotificationLogModel],
             sync: { alter: true },
             synchronize: true,
             logging: console.log,
@@ -151,6 +154,7 @@ import { TelegramBroadcastModel } from './modules/telegram-bot/entities/telegram
     EducationCenterModule,
     TelegramModule,
     TelegramBotModule,
+    AutoNotificationModule,
   ],
   controllers: [
   ],

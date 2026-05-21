@@ -32,43 +32,40 @@ export class AutoNotificationService {
     private notificationService: NotificationService,
   ) {}
 
-  @Cron('*/2 * * * *', { timeZone: 'Asia/Tashkent' })
+  @Cron('* * * * *', { timeZone: 'Asia/Tashkent' })
   async scheduledNotificationCheck() {
     const now = new Date();
-    const tashkentTime = now.toLocaleString('en-US', { timeZone: 'Asia/Tashkent' });
-    const t = new Date(tashkentTime);
-    const currentHHMM = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
+    const tashkentOffset = 5 * 60;
+    const totalMin = (now.getUTCHours() * 60 + now.getUTCMinutes() + tashkentOffset) % (24 * 60);
+    const hh = String(Math.floor(totalMin / 60)).padStart(2, '0');
+    const mm = String(totalMin % 60).padStart(2, '0');
+    const currentHHMM = `${hh}:${mm}`;
 
-    this.logger.log(`Cron check at ${currentHHMM} Tashkent time`);
+    this.logger.log(`[CRON] Tashkent vaqti: ${currentHHMM}`);
 
     const configs = await this.configModel.findAll({ where: { enabled: true } });
-    if (configs.length === 0) {
-      this.logger.log('No enabled auto-notification configs found');
-      return;
-    }
+    if (configs.length === 0) return;
 
     for (const config of configs) {
       let times: string[];
       try {
         times = JSON.parse(config.send_times);
       } catch {
-        this.logger.warn(`Invalid send_times for center ${config.center_id}: ${config.send_times}`);
+        this.logger.warn(`Invalid send_times for center ${config.center_id}`);
         continue;
       }
 
       if (times.includes(currentHHMM)) {
-        this.logger.log(`==========================`);
-        this.logger.log(`AUTO NOTIFICATION TRIGGERED for center ${config.center_id} at ${currentHHMM}`);
+        this.logger.log(`[CRON] => Center ${config.center_id} uchun ${currentHHMM} da jo'natish boshlandi`);
         await this.processPaymentReminders(config).catch((e) =>
           this.logger.error(`Center ${config.center_id} error: ${e.message}`, e.stack),
         );
-        this.logger.log(`==========================`);
       }
     }
   }
 
   async triggerManual(centerId: number) {
-    this.logger.log(`Manual trigger for center ${centerId}`);
+    this.logger.log(`[MANUAL] Center ${centerId}`);
     const config = await this.getConfig(centerId);
     await this.processPaymentReminders(config);
     return { success: true, message: 'Test jo\'natildi' };
@@ -78,7 +75,7 @@ export class AutoNotificationService {
     const centerId = config.center_id;
     const template = config.message_template;
     if (!template) {
-      this.logger.warn(`Center ${centerId}: No message template`);
+      this.logger.warn(`Center ${centerId}: Xabar matni yo'q`);
       return;
     }
 
@@ -91,7 +88,7 @@ export class AutoNotificationService {
     });
 
     if (unpaidPayments.length === 0) {
-      this.logger.log(`Center ${centerId}: No unpaid payments found for ${year}-${month}`);
+      this.logger.log(`Center ${centerId}: ${year}-${month} da to'lov qilmagan student yo'q`);
       await this.logModel.create({
         center_id: centerId,
         student_id: 0,
@@ -110,7 +107,7 @@ export class AutoNotificationService {
     });
 
     if (students.length === 0) {
-      this.logger.log(`Center ${centerId}: No active unpaid students found`);
+      this.logger.log(`Center ${centerId}: Faol student topilmadi`);
       await this.logModel.create({
         center_id: centerId,
         student_id: 0,
@@ -123,9 +120,6 @@ export class AutoNotificationService {
       return;
     }
 
-    this.logger.log(`Center ${centerId}: ${unpaidPayments.length} unpaid payments, ${students.length} active students`);
-
-    // Build payment map: student_id -> { amount, group_id }
     const paymentMap = new Map<number, { amount: number; group_id: number | null }>();
     for (const p of unpaidPayments) {
       const sid = Number(p.student_id);
@@ -134,7 +128,6 @@ export class AutoNotificationService {
       }
     }
 
-    // Build group map: group_id -> name
     const groupIds = [...new Set(unpaidPayments.map(p => p.group_id).filter(Boolean).map(Number))];
     const groupMap = new Map<number, string>();
     if (groupIds.length > 0) {
@@ -170,22 +163,25 @@ export class AutoNotificationService {
           telegramSent = result;
           if (!result) {
             telegramError = 'Telegram API jo\'natishda xatolik';
-            this.logger.warn(`Center ${centerId}, student ${studentJson.id}: Telegram send failed`);
+            this.logger.warn(`Center ${centerId}, student ${sid}: Telegram send failed`);
+            failedCount++;
           } else {
             sentCount++;
           }
         } catch (e) {
           telegramError = e.message;
-          this.logger.error(`Center ${centerId}, student ${studentJson.id}: ${e.message}`);
+          this.logger.error(`Center ${centerId}, student ${sid}: ${e.message}`);
+          failedCount++;
         }
-      } else if (!chat) {
+      } else if (chat && !config.send_telegram) {
+        noTelegramCount++;
+      } else {
         noTelegramCount++;
       }
 
-      // Send in-app notification too
       try {
         await this.notificationService.send({
-          student_id: studentJson.id,
+          student_id: sid,
           center_id: centerId,
           title: 'To\'lov eslatmasi',
           description: messageText,
@@ -193,12 +189,12 @@ export class AutoNotificationService {
           sender_type: 'system',
         });
       } catch (e) {
-        this.logger.warn(`In-app notification failed for student ${studentJson.id}: ${e.message}`);
+        this.logger.warn(`In-app notification failed for student ${sid}: ${e.message}`);
       }
 
       await this.logModel.create({
         center_id: centerId,
-        student_id: studentJson.id,
+        student_id: sid,
         notification_type: config.notification_type,
         scheduled_time: now,
         telegram_chat_id: chat ? chat.chat_id : null,
@@ -209,7 +205,7 @@ export class AutoNotificationService {
       });
     }
 
-    this.logger.log(`Center ${centerId}: Sent=${sentCount}, Failed=${failedCount}, NoTelegram=${noTelegramCount}`);
+    this.logger.log(`[DONE] Center ${centerId}: Sent=${sentCount}, Failed=${failedCount}, NoTelegram=${noTelegramCount}`);
   }
 
   private replacePlaceholders(template: string, student: any, groupName = '', summa = ''): string {

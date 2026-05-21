@@ -10,6 +10,9 @@ import { StudentModel } from '../students/model/student.entity';
 import { TeacherModel } from '../teachers/model/teacher.model';
 import { ParentModel } from '../parents/entities/parent.entity';
 import { GroupModel } from '../groups/model/group.entity';
+import { ChatRoomModel } from '../chat/entities/chat-room.entity';
+import { ChatMessageModel } from '../chat/entities/chat-message.entity';
+import { MessageStatusModel } from '../chat/entities/message-status.entity';
 import { CreateEducationCenterDto } from './dto/create-education-center.dto';
 import { UpdateEducationCenterDto } from './dto/update-education-center.dto';
 import * as bcrypt from 'bcrypt';
@@ -27,6 +30,9 @@ export class EducationCenterService implements OnModuleInit {
     @InjectModel(TeacherModel) private teacherModel: typeof TeacherModel,
     @InjectModel(ParentModel) private parentModel: typeof ParentModel,
     @InjectModel(GroupModel) private groupModel: typeof GroupModel,
+    @InjectModel(ChatRoomModel) private chatRoomModel: typeof ChatRoomModel,
+    @InjectModel(ChatMessageModel) private chatMessageModel: typeof ChatMessageModel,
+    @InjectModel(MessageStatusModel) private messageStatusModel: typeof MessageStatusModel,
   ) {}
 
   async onModuleInit() {
@@ -226,7 +232,25 @@ export class EducationCenterService implements OnModuleInit {
   async remove(id: number) {
     const center = await this.findOne(id);
 
-    // Bog'liq ma'lumotlarni o'chirish
+    // Guruhlar bo'yicha chat xabarlari statuslarini o'chirish
+    const groupIds = await this.groupModel.findAll({
+      where: { center_id: id },
+      attributes: ['id'],
+    }).then(rows => rows.map(r => r.id));
+
+    if (groupIds.length > 0) {
+      const roomIds = await this.chatRoomModel.findAll({
+        where: { group_id: groupIds },
+        attributes: ['id'],
+      }).then(rows => rows.map(r => r.id));
+
+      if (roomIds.length > 0) {
+        await this.messageStatusModel.destroy({ where: { message_id: { [Op.in]: (await this.chatMessageModel.findAll({ where: { room_id: roomIds }, attributes: ['id'] })).map(r => r.id) } } });
+        await this.chatMessageModel.destroy({ where: { room_id: roomIds } });
+        await this.chatRoomModel.destroy({ where: { id: roomIds } });
+      }
+    }
+
     await Promise.all([
       this.adminModel.destroy({ where: { center_id: id } }),
       this.studentModel.destroy({ where: { center_id: id } }),

@@ -11,9 +11,12 @@ import { StudentModel } from '../students/model/student.entity';
 import { TeacherModel } from '../teachers/model/teacher.model';
 import { ParentModel } from '../parents/entities/parent.entity';
 import { GroupModel } from '../groups/model/group.entity';
+import { ChatRoomModel } from '../chat/entities/chat-room.entity';
+import { ChatMessageModel } from '../chat/entities/chat-message.entity';
+import { MessageStatusModel } from '../chat/entities/message-status.entity';
 
 @Module({
-  imports: [SequelizeModule.forFeature([EducationCenterModel, CenterBranchModel, TariffModel, AdminModel, StudentModel, TeacherModel, ParentModel, GroupModel]), TariffModule],
+  imports: [SequelizeModule.forFeature([EducationCenterModel, CenterBranchModel, TariffModel, AdminModel, StudentModel, TeacherModel, ParentModel, GroupModel, ChatRoomModel, ChatMessageModel, MessageStatusModel]), TariffModule],
   controllers: [EducationCenterController],
   providers: [EducationCenterService],
   exports: [EducationCenterService],

@@ -66,6 +66,8 @@ import { EducationCenterModel } from './modules/education-centers/entities/educa
 import { CenterBranchModel } from './modules/education-centers/entities/center-branch.entity';
 import { TariffModule } from './modules/tariffs/tariff.module';
 import { TariffModel } from './modules/tariffs/entities/tariff.entity';
+import { TelegramModule } from './modules/telegram/telegram.module';
+import { TelegramSettingsModel } from './modules/telegram/entities/telegram-settings.entity';
 
 @Module({
   imports: [
@@ -91,7 +93,7 @@ import { TariffModel } from './modules/tariffs/entities/tariff.entity';
             username: config.get<string>('databaseConfig.user'),
             password: config.get<string>('databaseConfig.password'),
             database: config.get<string>('databaseConfig.dbname'),
-            models: [TariffModel, TeacherModel,LevelModel,AdminModel,UserDeviceModel,GroupLessonModel,RedoIncorrectTaskModel, StudentModel,GroupModel,GroupStudentModel,AttendanceModel,UnitModel,ExerciseModel,TaskModel,StudentAnswerModel,ExerciseResultModel,VocabModel,VocabAnswerModel,VocabResultModel,UnitResultModel,StudentCoinsModel,TeacherCoinLogModel,TaskCoinLogModel,ChatRoomModel,ChatMessageModel,MessageStatusModel,ParentModel,ParentStudentModel,RoomModel,PaymentModel,EducationCenterModel,CenterBranchModel,LeadModel,LeadSourceModel],
+            models: [TariffModel, TeacherModel,LevelModel,AdminModel,UserDeviceModel,GroupLessonModel,RedoIncorrectTaskModel, StudentModel,GroupModel,GroupStudentModel,AttendanceModel,UnitModel,ExerciseModel,TaskModel,StudentAnswerModel,ExerciseResultModel,VocabModel,VocabAnswerModel,VocabResultModel,UnitResultModel,StudentCoinsModel,TeacherCoinLogModel,TaskCoinLogModel,ChatRoomModel,ChatMessageModel,MessageStatusModel,ParentModel,ParentStudentModel,RoomModel,PaymentModel,EducationCenterModel,CenterBranchModel,LeadModel,LeadSourceModel,TelegramSettingsModel],
             sync: { alter: true },
             synchronize: true,
             logging: console.log,
@@ -141,6 +143,7 @@ import { TariffModel } from './modules/tariffs/entities/tariff.entity';
     LeadSourceModule,
     TariffModule,
     EducationCenterModule,
+    TelegramModule,
   ],
   controllers: [
   ],

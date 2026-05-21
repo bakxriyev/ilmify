@@ -9,6 +9,7 @@ import { NotificationModule } from '../notification/notification.module';
 import { StudentModel } from '../students/model/student.entity';
 import { TelegramChatModel } from '../telegram-bot/entities/telegram-chat.entity';
 import { PaymentModel } from '../payments/entities/payment.entity';
+import { GroupModel } from '../groups/model/group.entity';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { PaymentModel } from '../payments/entities/payment.entity';
       AutoNotificationConfigModel,
       AutoNotificationLogModel,
       StudentModel,
+      GroupModel,
       TelegramChatModel,
       PaymentModel,
     ]),

@@ -7,6 +7,7 @@ import { AutoNotificationLogModel } from './entities/auto-notification-log.entit
 import { BotManagerService } from '../telegram-bot/bot-manager.service';
 import { NotificationService } from '../notification/notification.service';
 import { StudentModel } from '../students/model/student.entity';
+import { GroupModel } from '../groups/model/group.entity';
 import { TelegramChatModel } from '../telegram-bot/entities/telegram-chat.entity';
 import { PaymentModel } from '../payments/entities/payment.entity';
 
@@ -25,6 +26,8 @@ export class AutoNotificationService {
     private chatModel: typeof TelegramChatModel,
     @InjectModel(PaymentModel)
     private paymentModel: typeof PaymentModel,
+    @InjectModel(GroupModel)
+    private groupModel: typeof GroupModel,
     private botManager: BotManagerService,
     private notificationService: NotificationService,
   ) {}
@@ -84,7 +87,7 @@ export class AutoNotificationService {
     const month = now.getMonth() + 1;
 
     const unpaidPayments = await this.paymentModel.findAll({
-      where: { center_id: centerId, month, year, status: { [Op.ne]: 'paid' } },
+      where: { month, year, status: { [Op.ne]: 'paid' } },
     });
 
     if (unpaidPayments.length === 0) {
@@ -101,12 +104,45 @@ export class AutoNotificationService {
       return;
     }
 
-    const studentIds = [...new Set(unpaidPayments.map(p => p.student_id))];
+    const allStudentIds = [...new Set(unpaidPayments.map(p => Number(p.student_id)))];
     const students = await this.studentModel.findAll({
-      where: { id: studentIds, center_id: centerId, isActive: true },
+      where: { id: allStudentIds, isActive: true },
     });
 
+    if (students.length === 0) {
+      this.logger.log(`Center ${centerId}: No active unpaid students found`);
+      await this.logModel.create({
+        center_id: centerId,
+        student_id: 0,
+        notification_type: config.notification_type,
+        scheduled_time: now,
+        telegram_sent: false,
+        delivered: false,
+        message_text: 'Faol student topilmadi',
+      });
+      return;
+    }
+
     this.logger.log(`Center ${centerId}: ${unpaidPayments.length} unpaid payments, ${students.length} active students`);
+
+    // Build payment map: student_id -> { amount, group_id }
+    const paymentMap = new Map<number, { amount: number; group_id: number | null }>();
+    for (const p of unpaidPayments) {
+      const sid = Number(p.student_id);
+      if (!paymentMap.has(sid)) {
+        paymentMap.set(sid, { amount: Number(p.amount), group_id: p.group_id ? Number(p.group_id) : null });
+      }
+    }
+
+    // Build group map: group_id -> name
+    const groupIds = [...new Set(unpaidPayments.map(p => p.group_id).filter(Boolean).map(Number))];
+    const groupMap = new Map<number, string>();
+    if (groupIds.length > 0) {
+      const groups = await this.groupModel.findAll({ where: { id: groupIds }, attributes: ['id', 'name'] });
+      for (const g of groups) {
+        groupMap.set(Number(g.id), g.name);
+      }
+    }
 
     let sentCount = 0;
     let failedCount = 0;
@@ -114,10 +150,15 @@ export class AutoNotificationService {
 
     for (const student of students) {
       const studentJson = student.toJSON();
-      const messageText = this.replacePlaceholders(template, studentJson);
+      const sid = Number(studentJson.id);
+      const paymentData = paymentMap.get(sid);
+      const groupName = paymentData?.group_id ? (groupMap.get(paymentData.group_id) || '') : '';
+      const summa = paymentData ? Math.floor(paymentData.amount).toLocaleString() : '0';
+
+      const messageText = this.replacePlaceholders(template, studentJson, groupName, summa);
 
       const chat = await this.chatModel.findOne({
-        where: { student_id: studentJson.id, center_id: centerId },
+        where: { student_id: sid },
       });
 
       let telegramSent = false;
@@ -171,14 +212,13 @@ export class AutoNotificationService {
     this.logger.log(`Center ${centerId}: Sent=${sentCount}, Failed=${failedCount}, NoTelegram=${noTelegramCount}`);
   }
 
-  private replacePlaceholders(template: string, student: any): string {
+  private replacePlaceholders(template: string, student: any, groupName = '', summa = ''): string {
     return template
       .replace(/{ism}/g, student.first_name || '')
       .replace(/{familiya}/g, student.last_name || '')
       .replace(/{tel}/g, student.phone_number || '')
-      .replace(/{guruh}/g, '')
-      .replace(/{markaz}/g, '')
-      .replace(/{summa}/g, '');
+      .replace(/{guruh}/g, groupName)
+      .replace(/{summa}/g, summa);
   }
 
   async getConfig(centerId: number): Promise<AutoNotificationConfigModel> {

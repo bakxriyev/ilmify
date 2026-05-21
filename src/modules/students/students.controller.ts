@@ -110,6 +110,12 @@ async findAll(@Query() query: StudentQueryDto, @Req() req?: any) {
 }
 
 
+  @Get('stats')
+  @ApiOperation({ summary: 'Studentlar statistikasi' })
+  async getStats(@Req() req?: any) {
+    return await this.studentService.getStats(req?.center_id);
+  }
+
   @Get('group/:groupId')
   @ApiOperation({ summary: "Guruh bo'yicha studentlarni olish" })
   @ApiResponse({ status: HttpStatus.OK, description: 'Guruh studentlari' })

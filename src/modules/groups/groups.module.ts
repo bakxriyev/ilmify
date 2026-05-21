@@ -10,10 +10,11 @@ import {GroupLessonModel} from '../group-lesson/entities/group-lesson.entity'
 import { ChatRoomModel } from '../chat/entities/chat-room.entity';
 import { RoomModel } from '../rooms/entities/room.entity';
 import { AttendanceModel } from '../attendence/model/attendence.entity';
+import { StudentModel } from '../students/model/student.entity';
 
 @Module({
   imports: [
-    SequelizeModule.forFeature([GroupModel, TeacherModel, GroupStudentModel,LevelModel,GroupLessonModel, ChatRoomModel, RoomModel, AttendanceModel]),
+    SequelizeModule.forFeature([GroupModel, TeacherModel, GroupStudentModel,LevelModel,GroupLessonModel, ChatRoomModel, RoomModel, AttendanceModel, StudentModel]),
   ],
   controllers: [GroupController],
   providers: [GroupService],

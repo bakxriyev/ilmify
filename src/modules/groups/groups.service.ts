@@ -40,6 +40,9 @@ export class GroupService {
     @InjectModel(RoomModel)
     private readonly roomModel: typeof RoomModel,
 
+    @InjectModel(StudentModel)
+    private readonly studentModel: typeof StudentModel,
+
   ) {}
 
 async create(createGroupDto: CreateGroupDto, center_id?: number): Promise<GroupModel> {
@@ -248,20 +251,25 @@ async create(createGroupDto: CreateGroupDto, center_id?: number): Promise<GroupM
     return this.findOne(id);
   }
 
- async remove(groupId: number): Promise<void> {
+  async remove(groupId: number): Promise<void> {
     const group = await this.groupModel.findByPk(groupId);
     if (!group) throw new NotFoundException('Group not found');
 
-    // O'chirishdan oldin barcha bog'liq ma'lumotlarni tozalash
-    // Attendance yozuvlarini o'chirish (CASCADE yo'q)
+    // Studentlarni guruhdan chiqazish (group_id = null)
+    await this.studentModel.update(
+      { group_id: null },
+      { where: { group_id: groupId } },
+    );
+
+    // Attendance yozuvlarini o'chirish
     await this.attendanceModel.destroy({ where: { group_id: groupId } });
 
     // Chat xonalarini o'chirish
     await this.chatRoomModel.destroy({ where: { group_id: groupId } });
 
-    // Group studentlari CASCADE bo'yicha o'chadi
+    // Group studentlari (pivot) CASCADE bo'yicha o'chadi
     // Group darslari CASCADE bo'yicha o'chadi
-    // Groupning o'zini o'chirish (qolgan hamma narsa CASCADE orqali tozalanadi)
+    // Groupning o'zini o'chirish
     await group.destroy();
   }
 

@@ -166,6 +166,26 @@ export class StudentService {
     };
   }
 
+  // ================= GET STATS =================
+  async getStats(center_id?: number) {
+    const whereClause: any = {};
+    if (center_id) whereClause.center_id = center_id;
+
+    const [total, active, withGroup] = await Promise.all([
+      this.studentModel.count({ where: whereClause }),
+      this.studentModel.count({ where: { ...whereClause, isActive: true } }),
+      this.studentModel.count({ where: { ...whereClause, group_id: { [Op.ne]: null } } }),
+    ]);
+
+    return {
+      total,
+      active,
+      inactive: total - active,
+      withGroup,
+      withoutGroup: total - withGroup,
+    };
+  }
+
   // ================= FIND ALL =================
   async findAll(queryDto: StudentQueryDto, center_id?: number) {
     const page = queryDto.page ? parseInt(queryDto.page) : 1;

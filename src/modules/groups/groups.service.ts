@@ -264,6 +264,9 @@ async create(createGroupDto: CreateGroupDto, center_id?: number): Promise<GroupM
 
     // Paymentlarni guruhdan chiqazish (group_id = null) — to'lovlar saqlanib qoladi
     await this.sequelize.query(
+      'ALTER TABLE payments ALTER COLUMN group_id DROP NOT NULL',
+    );
+    await this.sequelize.query(
       'UPDATE payments SET group_id = NULL WHERE group_id = :groupId',
       { replacements: { groupId } },
     );

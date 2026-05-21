@@ -67,8 +67,8 @@ export class TelegramService {
   async verifyPassword(phone_number: string, password: string): Promise<{ success: boolean; student?: any }> {
     const student = await this.studentModel.findOne({
       where: { phone_number, password },
-      attributes: ['id', 'first_name', 'last_name', 'phone_number', 'email', 'age', 'is_active', 'center_id'],
-      include: [{ model: GroupModel, attributes: ['id', 'name', 'description', 'is_active'], required: false }],
+      attributes: ['id', 'first_name', 'last_name', 'phone_number', 'email', 'age', 'isActive', 'center_id'],
+      include: [{ model: GroupModel, attributes: ['id', 'name', 'description', 'isActive'], required: false }],
     });
     if (!student) return { success: false };
     return { success: true, student };
@@ -77,8 +77,8 @@ export class TelegramService {
   async getStudentProfile(studentId: number): Promise<any> {
     const student = await this.studentModel.findOne({
       where: { id: studentId },
-      attributes: ['id', 'first_name', 'last_name', 'phone_number', 'email', 'age', 'is_active', 'created_at'],
-      include: [{ model: GroupModel, attributes: ['id', 'name', 'description', 'is_active'] }],
+      attributes: ['id', 'first_name', 'last_name', 'phone_number', 'email', 'age', 'isActive', 'created_at'],
+      include: [{ model: GroupModel, attributes: ['id', 'name', 'description', 'isActive'], required: false }],
     });
     if (!student) throw new NotFoundException('Student topilmadi');
     return student;

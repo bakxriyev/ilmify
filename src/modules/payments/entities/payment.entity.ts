@@ -19,7 +19,7 @@ export class PaymentModel extends Model {
   student_id: number;
 
   @ForeignKey(() => GroupModel)
-  @Column({ type: DataType.BIGINT, allowNull: false })
+  @Column({ type: DataType.BIGINT, allowNull: true })
   group_id: number;
 
   @Column({ type: DataType.DECIMAL(10, 2), allowNull: false })

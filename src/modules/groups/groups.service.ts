@@ -256,9 +256,15 @@ async create(createGroupDto: CreateGroupDto, center_id?: number): Promise<GroupM
     const group = await this.groupModel.findByPk(groupId);
     if (!group) throw new NotFoundException('Group not found');
 
-    // Studentlarni guruhdan chiqazish (group_id = null) — raw SQL orqali model sirkulyar dependency oldini olish uchun
+    // Studentlarni guruhdan chiqazish (group_id = null)
     await this.sequelize.query(
       'UPDATE students SET group_id = NULL WHERE group_id = :groupId',
+      { replacements: { groupId } },
+    );
+
+    // Paymentlarni guruhdan chiqazish (group_id = null) — to'lovlar saqlanib qoladi
+    await this.sequelize.query(
+      'UPDATE payments SET group_id = NULL WHERE group_id = :groupId',
       { replacements: { groupId } },
     );
 

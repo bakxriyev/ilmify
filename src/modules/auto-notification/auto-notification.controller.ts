@@ -1,4 +1,4 @@
-import { Controller, Get, Put, Param, Body, Query } from '@nestjs/common';
+import { Controller, Get, Put, Post, Param, Body, Query } from '@nestjs/common';
 import { AutoNotificationService } from './auto-notification.service';
 
 @Controller('auto-notification')
@@ -13,6 +13,11 @@ export class AutoNotificationController {
   @Put(':centerId/config')
   async updateConfig(@Param('centerId') centerId: string, @Body() body: any) {
     return this.service.updateConfig(Number(centerId), body);
+  }
+
+  @Post(':centerId/trigger')
+  async triggerManual(@Param('centerId') centerId: string) {
+    return this.service.triggerManual(Number(centerId));
   }
 
   @Get(':centerId/logs')

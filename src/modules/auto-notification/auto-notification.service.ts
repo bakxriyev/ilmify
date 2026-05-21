@@ -1,14 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { InjectModel } from '@nestjs/sequelize';
 import { Op, Sequelize } from 'sequelize';
 import { AutoNotificationConfigModel } from './entities/auto-notification-config.entity';
 import { AutoNotificationLogModel } from './entities/auto-notification-log.entity';
 import { BotManagerService } from '../telegram-bot/bot-manager.service';
+import { NotificationService } from '../notification/notification.service';
 import { StudentModel } from '../students/model/student.entity';
 import { TelegramChatModel } from '../telegram-bot/entities/telegram-chat.entity';
 import { PaymentModel } from '../payments/entities/payment.entity';
-import { EducationCenterModel } from '../education-centers/entities/education-center.entity';
 
 @Injectable()
 export class AutoNotificationService {
@@ -25,39 +25,59 @@ export class AutoNotificationService {
     private chatModel: typeof TelegramChatModel,
     @InjectModel(PaymentModel)
     private paymentModel: typeof PaymentModel,
-    @InjectModel(EducationCenterModel)
-    private centerModel: typeof EducationCenterModel,
     private botManager: BotManagerService,
+    private notificationService: NotificationService,
   ) {}
 
-  @Cron('*/15 * * * *', { timeZone: 'Asia/Tashkent' })
+  @Cron('*/2 * * * *', { timeZone: 'Asia/Tashkent' })
   async scheduledNotificationCheck() {
     const now = new Date();
     const tashkentTime = now.toLocaleString('en-US', { timeZone: 'Asia/Tashkent' });
     const t = new Date(tashkentTime);
     const currentHHMM = `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
 
+    this.logger.log(`Cron check at ${currentHHMM} Tashkent time`);
+
     const configs = await this.configModel.findAll({ where: { enabled: true } });
+    if (configs.length === 0) {
+      this.logger.log('No enabled auto-notification configs found');
+      return;
+    }
+
     for (const config of configs) {
       let times: string[];
       try {
         times = JSON.parse(config.send_times);
       } catch {
+        this.logger.warn(`Invalid send_times for center ${config.center_id}: ${config.send_times}`);
         continue;
       }
+
       if (times.includes(currentHHMM)) {
-        this.logger.log(`Auto-notification triggered for center ${config.center_id} at ${currentHHMM}`);
+        this.logger.log(`==========================`);
+        this.logger.log(`AUTO NOTIFICATION TRIGGERED for center ${config.center_id} at ${currentHHMM}`);
         await this.processPaymentReminders(config).catch((e) =>
-          this.logger.error(`Center ${config.center_id} auto-notification error: ${e.message}`),
+          this.logger.error(`Center ${config.center_id} error: ${e.message}`, e.stack),
         );
+        this.logger.log(`==========================`);
       }
     }
+  }
+
+  async triggerManual(centerId: number) {
+    this.logger.log(`Manual trigger for center ${centerId}`);
+    const config = await this.getConfig(centerId);
+    await this.processPaymentReminders(config);
+    return { success: true, message: 'Test jo\'natildi' };
   }
 
   private async processPaymentReminders(config: AutoNotificationConfigModel) {
     const centerId = config.center_id;
     const template = config.message_template;
-    if (!template) return;
+    if (!template) {
+      this.logger.warn(`Center ${centerId}: No message template`);
+      return;
+    }
 
     const now = new Date();
     const year = now.getFullYear();
@@ -67,18 +87,34 @@ export class AutoNotificationService {
       where: { center_id: centerId, month, year, status: { [Op.ne]: 'paid' } },
     });
 
-    const studentIds = [...new Set(unpaidPayments.map(p => p.student_id))];
-    if (studentIds.length === 0) return;
+    if (unpaidPayments.length === 0) {
+      this.logger.log(`Center ${centerId}: No unpaid payments found for ${year}-${month}`);
+      await this.logModel.create({
+        center_id: centerId,
+        student_id: 0,
+        notification_type: config.notification_type,
+        scheduled_time: now,
+        telegram_sent: false,
+        delivered: false,
+        message_text: 'To\'lov qilmagan student topilmadi',
+      });
+      return;
+    }
 
+    const studentIds = [...new Set(unpaidPayments.map(p => p.student_id))];
     const students = await this.studentModel.findAll({
       where: { id: studentIds, center_id: centerId, isActive: true },
     });
 
-    this.logger.log(`Center ${centerId}: Found ${students.length} unpaid students`);
+    this.logger.log(`Center ${centerId}: ${unpaidPayments.length} unpaid payments, ${students.length} active students`);
+
+    let sentCount = 0;
+    let failedCount = 0;
+    let noTelegramCount = 0;
 
     for (const student of students) {
       const studentJson = student.toJSON();
-      let messageText = this.replacePlaceholders(template, studentJson);
+      const messageText = this.replacePlaceholders(template, studentJson);
 
       const chat = await this.chatModel.findOne({
         where: { student_id: studentJson.id, center_id: centerId },
@@ -86,13 +122,37 @@ export class AutoNotificationService {
 
       let telegramSent = false;
       let telegramError: string | null = null;
-      let delivered = false;
 
       if (chat && config.send_telegram) {
-        const result = await this.botManager.sendToChat(centerId, chat.chat_id, messageText);
-        telegramSent = result;
-        delivered = result;
-        if (!result) telegramError = 'Send failed';
+        try {
+          const result = await this.botManager.sendToChat(centerId, chat.chat_id, messageText);
+          telegramSent = result;
+          if (!result) {
+            telegramError = 'Telegram API jo\'natishda xatolik';
+            this.logger.warn(`Center ${centerId}, student ${studentJson.id}: Telegram send failed`);
+          } else {
+            sentCount++;
+          }
+        } catch (e) {
+          telegramError = e.message;
+          this.logger.error(`Center ${centerId}, student ${studentJson.id}: ${e.message}`);
+        }
+      } else if (!chat) {
+        noTelegramCount++;
+      }
+
+      // Send in-app notification too
+      try {
+        await this.notificationService.send({
+          student_id: studentJson.id,
+          center_id: centerId,
+          title: 'To\'lov eslatmasi',
+          description: messageText,
+          role: 'student',
+          sender_type: 'system',
+        });
+      } catch (e) {
+        this.logger.warn(`In-app notification failed for student ${studentJson.id}: ${e.message}`);
       }
 
       await this.logModel.create({
@@ -103,10 +163,12 @@ export class AutoNotificationService {
         telegram_chat_id: chat ? chat.chat_id : null,
         telegram_sent: telegramSent,
         telegram_error: telegramError,
-        delivered,
+        delivered: telegramSent,
         message_text: messageText,
       });
     }
+
+    this.logger.log(`Center ${centerId}: Sent=${sentCount}, Failed=${failedCount}, NoTelegram=${noTelegramCount}`);
   }
 
   private replacePlaceholders(template: string, student: any): string {
@@ -114,8 +176,8 @@ export class AutoNotificationService {
       .replace(/{ism}/g, student.first_name || '')
       .replace(/{familiya}/g, student.last_name || '')
       .replace(/{tel}/g, student.phone_number || '')
-      .replace(/{guruh}/g, student.group_name || '')
-      .replace(/{markaz}/g, student.center_name || '')
+      .replace(/{guruh}/g, '')
+      .replace(/{markaz}/g, '')
       .replace(/{summa}/g, '');
   }
 

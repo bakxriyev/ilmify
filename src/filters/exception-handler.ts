@@ -13,28 +13,43 @@ export class ExceptionHandlerFilter implements ExceptionFilter {
         const ctx = host.switchToHttp();
         const request = ctx.getRequest<Request>();
         const response = ctx.getResponse<Response>();
-
         const requestTime = new Date().toISOString();
+        const method = request.method;
+        const url = request.url;
+        const body = request.body || {};
+
+        console.error(`[${requestTime}] ${method} ${url} - XATOLIK:`);
+        console.error('  Message:', exception?.message || exception?.toString() || 'Unknown error');
 
         if (exception instanceof HttpException) {
-            console.log(exception, "*")
-            return response.status(exception.getStatus()).json({
+            const status = exception.getStatus();
+            if (status >= 500) {
+                console.error('  Stack:', exception.stack);
+                if (body && Object.keys(body).length > 0) {
+                    console.error('  Body:', JSON.stringify(body).slice(0, 500));
+                }
+            }
+            return response.status(status).json({
                 message: exception.message,
                 requestTime,
                 url: request.url,
                 errorName: exception.name,
-                statusCode: exception.getStatus(),
+                statusCode: status,
             });
         }
+
         if (exception instanceof sequelize.UniqueConstraintError) {
-           return response.status(400).json({
-            message: exception.message,
-            requestTime,
-            url: request.url,
-            error: 'Duplicate value',
-            errorName: exception.name,
+            console.error('  Sequelize unique error');
+            return response.status(400).json({
+                message: exception.message,
+                requestTime,
+                url: request.url,
+                error: 'Duplicate value',
+                errorName: exception.name,
             });
-          } 
+        }
+
+        console.error('  Unhandled error stack:', exception?.stack || 'No stack trace');
 
         return response.status(500).json({
             message: exception?.message || 'Internal server error',

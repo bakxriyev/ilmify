@@ -68,7 +68,7 @@ export class TelegramService {
     const student = await this.studentModel.findOne({
       where: { phone_number, password },
       attributes: ['id', 'first_name', 'last_name', 'phone_number', 'email', 'age', 'is_active', 'center_id'],
-      include: [{ model: GroupModel, attributes: ['id', 'name', 'description', 'is_active'] }],
+      include: [{ model: GroupModel, attributes: ['id', 'name', 'description', 'is_active'], required: false }],
     });
     if (!student) return { success: false };
     return { success: true, student };

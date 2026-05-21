@@ -27,6 +27,19 @@ async function bootstrap() {
 
   app.useGlobalFilters(new ExceptionHandlerFilter());
 
+  // Request logging middleware
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const start = Date.now();
+    const { method, url } = req;
+    res.on('finish', () => {
+      const duration = Date.now() - start;
+      if (res.statusCode >= 400) {
+        console.log(`[${new Date().toISOString()}] ${method} ${url} ${res.statusCode} ${duration}ms`);
+      }
+    });
+    next();
+  });
+
   // Center ID header middleware - admin panelidan kelgan center_id ni request ga qo'shish
   app.use((req: Request, res: Response, next: NextFunction) => {
     const centerId = req.headers['x-center-id'];

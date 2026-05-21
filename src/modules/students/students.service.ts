@@ -59,20 +59,13 @@ export class StudentService {
       include: [{ model: this.tariffModel }],
     });
     if (!center) return;
-    if (center.tariff) {
-      const count = await this.studentModel.count({ where: { center_id } });
-      if (count >= center.tariff.student_max) {
-        throw new ForbiddenException(
-          `Talabalar soni chegarasiga yetdingiz (maksimal: ${center.tariff.student_max}). Tarifni yangilang.`,
-        );
-      }
-    } else {
-      const count = await this.studentModel.count({ where: { center_id } });
-      if (count >= 100) {
-        throw new ForbiddenException(
-          'Sinov rejimida maksimal 100 talaba. Tarif tanlang.',
-        );
-      }
+    const limit = center.tariff ? center.tariff.student_max : 999999;
+    const count = await this.studentModel.count({ where: { center_id } });
+    if (count >= limit) {
+      const msg = center.tariff
+        ? `Talabalar soni chegarasiga yetdingiz (maksimal: ${limit}). Tarifni yangilang.`
+        : 'Talabalar soni chegarasiga yetdingiz.';
+      throw new ForbiddenException(msg);
     }
   }
 

@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ConflictException, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { TariffModel } from './entities/tariff.entity';
+import { EducationCenterModel } from '../education-centers/entities/education-center.entity';
 import { CreateTariffDto } from './dto/create-tariff.dto';
 import { UpdateTariffDto } from './dto/update-tariff.dto';
 
@@ -9,6 +10,8 @@ export class TariffService implements OnModuleInit {
   constructor(
     @InjectModel(TariffModel)
     private tariffModel: typeof TariffModel,
+    @InjectModel(EducationCenterModel)
+    private educationCenterModel: typeof EducationCenterModel,
   ) {}
 
   async onModuleInit() {
@@ -59,6 +62,10 @@ export class TariffService implements OnModuleInit {
 
   async remove(id: number) {
     const tariff = await this.findOne(id);
+    const centersCount = await this.educationCenterModel.count({ where: { tariff_id: id } });
+    if (centersCount > 0) {
+      throw new ConflictException(`Bu tarif ${centersCount} ta markaz tomonidan ishlatilmoqda. Avval ularni boshqa tarifga o'tkazing.`);
+    }
     await tariff.destroy();
     return { message: 'Tarif o\'chirildi' };
   }

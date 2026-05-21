@@ -11,4 +11,8 @@ export class UpdateEducationCenterDto {
   @ApiPropertyOptional({ description: 'Necha oylik: 1, 3, 6, 12' }) @IsNumber() @IsOptional() @Min(1) tariff_duration?: number;
   @ApiPropertyOptional() @IsBoolean() @IsOptional() call_center_enabled?: boolean;
   @ApiPropertyOptional() @IsOptional() features?: Record<string, boolean>;
+  @ApiPropertyOptional({ description: 'Direktor parolini o\'zgartirish' }) @IsString() @IsOptional() director_password?: string;
+  @ApiPropertyOptional({ description: 'Direktor ism-familyasi' }) @IsString() @IsOptional() director_full_name?: string;
+  @ApiPropertyOptional({ description: 'Direktor emaili' }) @IsString() @IsOptional() director_email?: string;
+  @ApiPropertyOptional({ description: 'Direktor telefoni' }) @IsString() @IsOptional() director_phone?: string;
 }

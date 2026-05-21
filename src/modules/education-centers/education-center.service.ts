@@ -80,9 +80,12 @@ export class EducationCenterService implements OnModuleInit {
       tariff_ends_at.setMonth(tariff_ends_at.getMonth() + months);
     }
 
-    // BETA: 7 kunlik trial
-    const trial_ends_at = new Date();
-    trial_ends_at.setDate(trial_ends_at.getDate() + 7);
+    // BETA: 7 kunlik trial (faqat tarif tanlanmagan bo'lsa)
+    const trial_ends_at = dto.tariff_id ? null : (() => {
+      const d = new Date();
+      d.setDate(d.getDate() + 7);
+      return d;
+    })();
 
     const center = await this.centerModel.create({
       name: dto.name,
@@ -147,6 +150,22 @@ export class EducationCenterService implements OnModuleInit {
     }
 
     await center.update(updateData);
+
+    // Agar direktor paroli o'zgartirilsa
+    if (dto.director_password || dto.director_full_name || dto.director_email || dto.director_phone) {
+      const director = await this.adminModel.findOne({ where: { center_id: id, role: 'director' } });
+      if (director) {
+        const directorUpdate: any = {};
+        if (dto.director_password) {
+          directorUpdate.password = await bcrypt.hash(dto.director_password, 10);
+        }
+        if (dto.director_full_name) directorUpdate.full_name = dto.director_full_name;
+        if (dto.director_email) directorUpdate.email = dto.director_email;
+        if (dto.director_phone) directorUpdate.phone_number = dto.director_phone;
+        await director.update(directorUpdate);
+      }
+    }
+
     return this.findOne(id);
   }
 
@@ -206,8 +225,19 @@ export class EducationCenterService implements OnModuleInit {
 
   async remove(id: number) {
     const center = await this.findOne(id);
+
+    // Bog'liq ma'lumotlarni o'chirish
+    await Promise.all([
+      this.adminModel.destroy({ where: { center_id: id } }),
+      this.studentModel.destroy({ where: { center_id: id } }),
+      this.teacherModel.destroy({ where: { center_id: id } }),
+      this.parentModel.destroy({ where: { center_id: id } }),
+      this.groupModel.destroy({ where: { center_id: id } }),
+      this.branchModel.destroy({ where: { center_id: id } }),
+    ]);
+
     await center.destroy();
-    return { message: 'Markaz o\'chirildi' };
+    return { message: 'Markaz va unga bog\'liq barcha ma\'lumotlar o\'chirildi' };
   }
 
   async getStats() {
@@ -223,6 +253,22 @@ export class EducationCenterService implements OnModuleInit {
     const active = centers.filter(c => c.is_active).length;
     const totalBalance = centers.reduce((s, c) => s + Number(c.balance || 0), 0);
 
+    // Moliyaviy statistika
+    let totalIncome = 0;
+    const tariffIncome: Record<string, number> = {};
+
+    for (const c of centers) {
+      if (c.tariff_price && c.tariff_id) {
+        const price = Number(c.tariff_price);
+        totalIncome += price;
+        const name = c.tariff?.name || 'Noma\'lum';
+        tariffIncome[name] = (tariffIncome[name] || 0) + price;
+      }
+    }
+
+    // Server xarajati (barcha markazlardagi server_cost yig'indisi)
+    const serverCost = centers.reduce((s, c) => s + Number(c.server_cost || 0), 0);
+
     const centerStats = await Promise.all(centers.map(async (c) => {
       const [s, t, g] = await Promise.all([
         this.studentModel.count({ where: { center_id: c.id } }),
@@ -234,6 +280,7 @@ export class EducationCenterService implements OnModuleInit {
         tariff: c.tariff ? { id: c.tariff.id, name: c.tariff.name } : null,
         trial_ends_at: c.trial_ends_at,
         tariff_ends_at: c.tariff_ends_at,
+        tariff_price: c.tariff_price,
       };
     }));
 
@@ -245,6 +292,10 @@ export class EducationCenterService implements OnModuleInit {
       total_teachers: totalTeachers,
       total_parents: totalParents,
       total_groups: totalGroups,
+      total_income: totalIncome,
+      server_cost: serverCost,
+      net_profit: totalIncome - serverCost,
+      tariff_income: tariffIncome,
       centers: centerStats,
     };
   }
@@ -310,7 +361,7 @@ export class EducationCenterService implements OnModuleInit {
     const center = await this.centerModel.findByPk(centerId, {
       include: [{ model: TariffModel }],
     });
-    if (!center || !center.tariff) return 100;
+    if (!center || !center.tariff) return 999999; // BETA: cheksiz
     return center.tariff.student_max;
   }
 
@@ -319,6 +370,13 @@ export class EducationCenterService implements OnModuleInit {
     if (!center) throw new NotFoundException('Markaz topilmadi');
     await center.update({ logo: filename });
     return this.findOne(id);
+  }
+
+  async updateServerCost(centerId: number, cost: number) {
+    const center = await this.centerModel.findByPk(centerId);
+    if (!center) throw new NotFoundException('Markaz topilmadi');
+    await center.update({ server_cost: cost });
+    return { server_cost: cost };
   }
 
   async checkStudentLimit(centerId: number): Promise<void> {

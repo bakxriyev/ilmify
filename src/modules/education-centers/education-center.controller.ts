@@ -117,6 +117,12 @@ export class EducationCenterController {
     return this.service.remove(Number(id));
   }
 
+  @Patch(':id/server-cost')
+  @ApiOperation({ summary: 'Server xarajatini yangilash' })
+  updateServerCost(@Param('id') id: string, @Body('cost') cost: number) {
+    return this.service.updateServerCost(Number(id), cost);
+  }
+
   @Post(':id/branches')
   @ApiOperation({ summary: 'Filial qo\'shish' })
   addBranch(@Param('id') id: string, @Body() dto: { name: string; location?: string; phone?: string }) {

@@ -56,6 +56,9 @@ export class EducationCenterModel extends Model {
   @Column({ type: DataType.JSON, defaultValue: {} })
   features: Record<string, boolean>;
 
+  @Column({ type: DataType.DECIMAL(15, 2), defaultValue: 0 })
+  server_cost: number;
+
   @HasMany(() => CenterBranchModel, { foreignKey: 'center_id' })
   branches: CenterBranchModel[];
 

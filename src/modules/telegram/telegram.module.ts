@@ -8,6 +8,7 @@ import { PaymentModel } from '../payments/entities/payment.entity';
 import { AttendanceModel } from '../attendence/model/attendence.entity';
 import { ParentStudentModel } from '../parents/entities/parent-student.entity';
 import { ParentModel } from '../parents/entities/parent.entity';
+import { GroupStudentModel } from '../group_student_model';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { ParentModel } from '../parents/entities/parent.entity';
       AttendanceModel,
       ParentStudentModel,
       ParentModel,
+      GroupStudentModel,
     ]),
   ],
   controllers: [TelegramController, TelegramAuthController],

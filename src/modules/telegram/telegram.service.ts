@@ -5,6 +5,7 @@ import { StudentModel } from '../students/model/student.entity';
 import { PaymentModel } from '../payments/entities/payment.entity';
 import { AttendanceModel } from '../attendence/model/attendence.entity';
 import { GroupModel } from '../groups/model/group.entity';
+import { GroupStudentModel } from '../group_student_model';
 import { ParentStudentModel } from '../parents/entities/parent-student.entity';
 import { ParentModel } from '../parents/entities/parent.entity';
 import { Op } from 'sequelize';
@@ -20,6 +21,8 @@ export class TelegramService {
     private paymentModel: typeof PaymentModel,
     @InjectModel(AttendanceModel)
     private attendanceModel: typeof AttendanceModel,
+    @InjectModel(GroupStudentModel)
+    private groupStudentModel: typeof GroupStudentModel,
     @InjectModel(ParentStudentModel)
     private parentStudentModel: typeof ParentStudentModel,
     @InjectModel(ParentModel)
@@ -68,20 +71,38 @@ export class TelegramService {
     const student = await this.studentModel.findOne({
       where: { phone_number, password },
       attributes: ['id', 'first_name', 'last_name', 'phone_number', 'email', 'age', 'isActive', 'center_id'],
-      include: [{ model: GroupModel, attributes: ['id', 'name'], required: false }],
+      include: [
+        { model: GroupModel, attributes: ['id', 'name'], required: false },
+        { model: GroupStudentModel, as: 'group_students', required: false, include: [{ model: GroupModel, as: 'group', attributes: ['id', 'name'] }] },
+      ],
     });
     if (!student) return { success: false };
-    return { success: true, student };
+
+    const json = student.toJSON();
+    if (!json.group && json.group_students && json.group_students.length > 0) {
+      json.group = json.group_students[0].group;
+    }
+    delete json.group_students;
+    return { success: true, student: json };
   }
 
   async getStudentProfile(studentId: number): Promise<any> {
     const student = await this.studentModel.findOne({
       where: { id: studentId },
       attributes: ['id', 'first_name', 'last_name', 'phone_number', 'email', 'age', 'isActive'],
-      include: [{ model: GroupModel, attributes: ['id', 'name'], required: false }],
+      include: [
+        { model: GroupModel, attributes: ['id', 'name'], required: false },
+        { model: GroupStudentModel, as: 'group_students', required: false, include: [{ model: GroupModel, as: 'group', attributes: ['id', 'name'] }] },
+      ],
     });
     if (!student) throw new NotFoundException('Student topilmadi');
-    return student;
+
+    const json = student.toJSON();
+    if (!json.group && json.group_students && json.group_students.length > 0) {
+      json.group = json.group_students[0].group;
+    }
+    delete json.group_students;
+    return json;
   }
 
   async getStudentPayments(studentId: number, limit: number = 20): Promise<any[]> {
@@ -91,7 +112,10 @@ export class TelegramService {
       limit,
       attributes: ['id', 'amount', 'month', 'year', 'status', 'paid_at', 'note'],
     });
-    return payments;
+    return payments.map(p => ({
+      ...p.toJSON(),
+      amount: Number(p.amount),
+    }));
   }
 
   async getStudentAttendance(studentId: number, limit: number = 20): Promise<any[]> {
@@ -100,7 +124,7 @@ export class TelegramService {
       order: [['date', 'DESC']],
       limit,
       attributes: ['id', 'date', 'is_present', 'reason'],
-      include: [{ model: GroupModel, attributes: ['id', 'name'] }],
+      include: [{ model: GroupModel, attributes: ['id', 'name'], required: false }],
     });
     return records;
   }
@@ -110,6 +134,7 @@ export class TelegramService {
       where: { student_id: studentId },
       include: [{ model: ParentModel, as: 'parent', attributes: ['id', 'first_name', 'last_name', 'phone_number'] }],
     });
-    return links.map(l => l.parent).filter(Boolean);
+    const parents = links.map(l => l.parent).filter(Boolean);
+    return parents;
   }
 }

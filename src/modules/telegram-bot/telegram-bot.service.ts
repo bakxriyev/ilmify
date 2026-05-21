@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
+import { Sequelize } from 'sequelize-typescript';
 import { Op } from 'sequelize';
 import { TelegramBotModel } from './entities/telegram-bot.entity';
 import { TelegramChatModel } from './entities/telegram-chat.entity';
@@ -27,6 +28,7 @@ export class TelegramBotService {
     @InjectModel(StudentModel)
     private studentModel: typeof StudentModel,
     private botManager: BotManagerService,
+    private sequelize: Sequelize,
   ) {}
 
   // ─── Bot Settings ────────────────────────────────────────
@@ -71,14 +73,12 @@ export class TelegramBotService {
 
   // ─── Inbox ───────────────────────────────────────────────
   async getInbox(centerId: number, search?: string): Promise<any[]> {
-    // Get latest message from each unique chat (from users, not bot)
     const messages = await this.messageModel.findAll({
       where: { center_id: centerId, from_bot: false },
       order: [['created_at', 'DESC']],
       limit: 200,
     });
 
-    // Group by chat_id, keep latest
     const latestPerChat = new Map<number, any>();
     for (const msg of messages) {
       if (!latestPerChat.has(msg.chat_id)) {
@@ -95,7 +95,6 @@ export class TelegramBotService {
     const result = [];
     for (const [chatId, lastMsg] of latestPerChat) {
       const chat = chatMap.get(chatId);
-      // Get last 5 bot replies for this chat
       const replies = await this.messageModel.findAll({
         where: { center_id: centerId, chat_id: chatId, from_bot: true },
         order: [['created_at', 'DESC']],
@@ -119,8 +118,7 @@ export class TelegramBotService {
   }
 
   async sendReply(centerId: number, chatId: number, text: string): Promise<boolean> {
-    const sent = await this.botManager.sendToChat(centerId, chatId, text);
-    return sent;
+    return this.botManager.sendToChat(centerId, chatId, text);
   }
 
   // ─── Templates ───────────────────────────────────────────
@@ -245,7 +243,7 @@ export class TelegramBotService {
     return broadcast;
   }
 
-  // ─── Auth Helpers ────────────────────────────────────────
+  // ─── Auth ─────────────────────────────────────────────────
   async getActiveConfigs(): Promise<{ center_id: number; bot_token: string }[]> {
     const bots = await this.botModel.findAll({
       where: { is_active: true },
@@ -277,7 +275,6 @@ export class TelegramBotService {
     });
   }
 
-  // ─── Auth ─────────────────────────────────────────────────
   async getStudentByPhone(phone_number: string): Promise<StudentModel | null> {
     return this.studentModel.findOne({
       where: { phone_number },
@@ -314,88 +311,251 @@ export class TelegramBotService {
   async linkStudent(centerId: number, data: {
     chat_id: number; student_id: number; first_name?: string; last_name?: string; username?: string;
   }): Promise<void> {
-    await this.chatModel.upsert({
-      center_id: centerId,
-      chat_id: data.chat_id,
-      student_id: data.student_id,
-      first_name: data.first_name || '',
-      last_name: data.last_name || '',
-      username: data.username || '',
-      is_active: true,
+    const existing = await this.chatModel.findOne({
+      where: { center_id: centerId, chat_id: data.chat_id },
     });
+    if (existing) {
+      existing.student_id = data.student_id;
+      if (data.first_name) existing.first_name = data.first_name;
+      if (data.last_name) existing.last_name = data.last_name;
+      if (data.username) existing.username = data.username;
+      existing.is_active = true;
+      await existing.save();
+    } else {
+      await this.chatModel.create({
+        center_id: centerId,
+        chat_id: data.chat_id,
+        student_id: data.student_id,
+        first_name: data.first_name || '',
+        last_name: data.last_name || '',
+        username: data.username || '',
+        is_active: true,
+      });
+    }
   }
 
-  // ─── Student Info ─────────────────────────────────────────
+  // ─── Student Profile ─────────────────────────────────────
   async getStudentProfile(centerId: number, studentId: number): Promise<any> {
     const student = await this.studentModel.findByPk(studentId, {
-      attributes: ['id', 'first_name', 'last_name', 'phone_number', 'center_id'],
+      attributes: ['id', 'first_name', 'last_name', 'phone_number', 'center_id', 'group_id'],
     });
     if (!student) throw new NotFoundException('Student topilmadi');
     const s = student.toJSON();
 
     let group_name = '';
+    let teacher_name = '';
     let center_name = '';
+
     try {
-      const groupStudent = await (this.studentModel as any).sequelize?.models?.GroupStudentModel?.findOne({
-        where: { student_id: studentId },
-        include: [{ model: (this.studentModel as any).sequelize?.models?.GroupModel, attributes: ['name'] }],
-      });
-      if (groupStudent?.group) group_name = groupStudent.group.name;
+      if (s.group_id) {
+        const GroupModel = this.sequelize.model('GroupModel') as any;
+        if (GroupModel) {
+          const group = await GroupModel.findByPk(s.group_id, {
+            attributes: ['name', 'teacher_id'],
+          });
+          if (group) {
+            group_name = group.name;
+            if (group.teacher_id) {
+              const TeacherModel = this.sequelize.model('TeacherModel') as any;
+              if (TeacherModel) {
+                const teacher = await TeacherModel.findByPk(group.teacher_id, {
+                  attributes: ['first_name', 'last_name'],
+                });
+                if (teacher) {
+                  teacher_name = `${teacher.first_name} ${teacher.last_name}`.trim();
+                }
+              }
+            }
+          }
+        }
+      }
     } catch { }
 
     try {
-      const center = await (this.studentModel as any).sequelize?.models?.EducationCenterModel?.findByPk(centerId, {
-        attributes: ['name'],
-      });
-      if (center) center_name = center.name;
+      const CenterModel = this.sequelize.model('EducationCenterModel') as any;
+      if (CenterModel) {
+        const center = await CenterModel.findByPk(centerId, { attributes: ['name'] });
+        if (center) center_name = center.name;
+      }
     } catch { }
 
-    return { ...s, group_name, center_name };
+    return { ...s, group_name, teacher_name, center_name };
   }
 
-  async getStudentPayments(centerId: number, studentId: number): Promise<any[]> {
+  // ─── Attendance ───────────────────────────────────────────
+  async getStudentAttendance(centerId: number, studentId: number): Promise<any[]> {
     try {
-      const pmtModel = (this.studentModel as any).sequelize?.models?.PaymentModel;
-      if (!pmtModel) return [];
-      const payments = await pmtModel.findAll({
+      const AttendanceModel = this.sequelize.model('AttendanceModel') as any;
+      if (!AttendanceModel) return [];
+
+      const records = await AttendanceModel.findAll({
         where: { student_id: studentId },
-        order: [['created_at', 'DESC']],
-        limit: 20,
+        order: [['date', 'DESC']],
+        limit: 60,
       });
-      return payments.map((p: any) => p.toJSON());
-    } catch {
+      return records.map((r: any) => ({
+        date: r.date,
+        is_present: r.is_present,
+        reason: r.reason || '',
+      }));
+    } catch (err) {
+      this.logger.error(`Attendance error: ${err.message}`);
       return [];
     }
   }
 
-  async getStudentGroups(centerId: number, studentId: number): Promise<any[]> {
+  // ─── Payments ────────────────────────────────────────────
+  async getStudentPayments(centerId: number, studentId: number): Promise<any[]> {
     try {
-      const gsModel = (this.studentModel as any).sequelize?.models?.GroupStudentModel;
-      if (!gsModel) return [];
-      const gs = await gsModel.findAll({
-        where: { student_id: studentId },
-        include: [{ model: (this.studentModel as any).sequelize?.models?.GroupModel, attributes: ['name'] }],
+      const PaymentModel = this.sequelize.model('PaymentModel') as any;
+      if (!PaymentModel) return [];
+      const payments = await PaymentModel.findAll({
+        where: { student_id: studentId, center_id: centerId },
+        order: [['year', 'DESC'], [Sequelize.literal('"payments"."month"::int DESC')]],
+        limit: 24,
       });
-      return gs.map((g: any) => ({
-        group_name: g.group?.name || '',
+      return payments.map((p: any) => ({
+        amount: p.amount,
+        month: p.month,
+        year: p.year,
+        status: p.status,
+        paid_at: p.paid_at,
+        note: p.note,
       }));
     } catch {
       return [];
     }
   }
 
-  async getStudentGrades(centerId: number, studentId: number): Promise<any[]> {
+  // ─── Groups ──────────────────────────────────────────────
+  async getStudentGroups(centerId: number, studentId: number): Promise<any[]> {
     try {
-      const gradeModel = (this.studentModel as any).sequelize?.models?.GradeModel;
-      if (!gradeModel) return [];
-      const grades = await gradeModel.findAll({
-        where: { student_id: studentId },
-        order: [['created_at', 'DESC']],
-        limit: 50,
+      const GroupStudentModel = this.sequelize.model('GroupStudentModel') as any;
+      if (!GroupStudentModel) return [];
+
+      const gs = await GroupStudentModel.findAll({
+        where: { student_id: studentId, left_date: null },
+        include: [
+          {
+            model: this.sequelize.model('GroupModel') as any,
+            attributes: ['id', 'name', 'monthly_price'],
+            include: [
+              {
+                model: this.sequelize.model('TeacherModel') as any,
+                as: 'mainTeacher',
+                attributes: ['first_name', 'last_name', 'phone_number'],
+              },
+            ],
+          },
+        ],
       });
-      return grades.map((g: any) => g.toJSON());
+
+      return gs.map((g: any) => {
+        const group = g.group || {};
+        return {
+          id: group.id,
+          name: group.name || '',
+          monthly_price: group.monthly_price,
+          teacher_name: group.mainTeacher
+            ? `${group.mainTeacher.first_name || ''} ${group.mainTeacher.last_name || ''}`.trim()
+            : '',
+          teacher_phone: group.mainTeacher?.phone_number || '',
+        };
+      });
+    } catch (err) {
+      this.logger.error(`Groups error: ${err.message}`);
+      return [];
+    }
+  }
+
+  async getGroupSchedule(centerId: number, groupId: number): Promise<any[]> {
+    try {
+      const LessonModel = this.sequelize.model('GroupLessonModel') as any;
+      if (!LessonModel) return [];
+
+      const lessons = await LessonModel.findAll({
+        where: { group_id: groupId },
+        attributes: ['date', 'start_time', 'end_time', 'parity'],
+        order: [['date', 'ASC']],
+        limit: 20,
+      });
+      return lessons.map((l: any) => ({
+        date: l.date,
+        start_time: l.start_time,
+        end_time: l.end_time,
+        parity: l.parity,
+      }));
     } catch {
       return [];
     }
+  }
+
+  // ─── Grades ──────────────────────────────────────────────
+  async getStudentGrades(centerId: number, studentId: number): Promise<any[]> {
+    const grades: any[] = [];
+
+    try {
+      const ExerciseResultModel = this.sequelize.model('ExerciseResultModel') as any;
+      if (ExerciseResultModel) {
+        const results = await ExerciseResultModel.findAll({
+          where: { student_id: studentId },
+          order: [['completed_at', 'DESC']],
+          limit: 30,
+          include: [
+            {
+              model: this.sequelize.model('UnitModel') as any,
+              attributes: ['name', 'title'],
+            },
+          ],
+        });
+        for (const r of results) {
+          grades.push({
+            type: 'exercise',
+            subject: r.unit?.title || r.unit?.name || 'Mashq',
+            score: `${Math.round(r.percentage || 0)}%`,
+            date: r.completed_at,
+          });
+        }
+      }
+    } catch { }
+
+    try {
+      const UnitResultModel = this.sequelize.model('UnitResultModel') as any;
+      if (UnitResultModel) {
+        const results = await UnitResultModel.findAll({
+          where: { student_id: studentId },
+          order: [['completed_at', 'DESC']],
+          limit: 20,
+          include: [
+            {
+              model: this.sequelize.model('UnitModel') as any,
+              attributes: ['name', 'title'],
+            },
+          ],
+        });
+        for (const r of results) {
+          grades.push({
+            type: 'unit',
+            subject: r.unit?.title || r.unit?.name || 'Modul',
+            score: `${Math.round(r.percentage || 0)}%`,
+            date: r.completed_at,
+          });
+        }
+      }
+    } catch { }
+
+    grades.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+    return grades.slice(0, 40);
+  }
+
+  // ─── Contact Admin ──────────────────────────────────────
+  async contactAdmin(centerId: number, chatId: number, text: string): Promise<void> {
+    await this.messageModel.create({
+      center_id: centerId,
+      chat_id: chatId,
+      from_bot: false,
+      text: `[Admin xabari] ${text}`,
+      message_type: 'contact_admin',
+    });
   }
 }

@@ -412,6 +412,28 @@ export class StudentService {
     return { message: `${student_ids.length} ta student guruhga tayinlandi`, group_id, student_ids };
   }
 
+  // ================= BULK TOGGLE ACTIVE =================
+  async bulkToggleActive(isActive: boolean, center_id?: number) {
+    const where: any = {};
+    if (center_id) where.center_id = center_id;
+    where.isActive = !isActive;
+
+    const students = await this.studentModel.findAll({ where, attributes: ['id'] });
+    if (students.length === 0) {
+      return { updated: 0, message: 'Barcha studentlar allaqachon kerakli holatda' };
+    }
+
+    await this.studentModel.update(
+      { isActive },
+      { where: { id: { [Op.in]: students.map(s => s.id) } } },
+    );
+
+    return {
+      updated: students.length,
+      message: `${students.length} ta student ${isActive ? 'faollashtirildi' : 'nofaollashtirildi'}`,
+    };
+  }
+
   // ================= REMOVE FROM GROUP =================
   async removeFromGroup(studentIds: number[]) {
     await this.studentModel.update({ group_id: null }, { where: { id: { [Op.in]: studentIds } } });

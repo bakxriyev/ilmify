@@ -127,6 +127,15 @@ async findAll(@Query() query: StudentQueryDto, @Req() req?: any) {
     return await this.studentService.getStudentsByGroup(groupId, query, req?.center_id);
   }
 
+  @Patch('bulk/toggle-active')
+  @ApiOperation({ summary: "Barcha studentlarni faol/nofaol qilish" })
+  async bulkToggleActive(
+    @Body() dto: { isActive: boolean },
+    @Req() req?: any,
+  ) {
+    return await this.studentService.bulkToggleActive(dto.isActive, req?.center_id);
+  }
+
   @Get(':id/statistics')
   @ApiOperation({ summary: 'Student statistikasini olish' })
   @ApiResponse({ status: HttpStatus.OK, description: 'Student statistikasi' })

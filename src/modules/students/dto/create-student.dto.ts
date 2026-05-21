@@ -33,7 +33,9 @@ export class CreateStudentDto {
   @ApiProperty({
     example: '++998954546939',
     description: 'Telefon raqami',
+    required: false,
   })
+  @IsOptional()
   phone_number: string;
 
   @ApiProperty({

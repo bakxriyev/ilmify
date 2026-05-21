@@ -71,21 +71,24 @@ export class StudentService {
 
   // ================= CREATE =================
   async create(createDto: CreateStudentDto, center_id?: number) {
-    const orConditions: any[] = [
-      { phone_number: createDto.phone_number },
-    ];
+    const orConditions: any[] = [];
+    if (createDto.phone_number) {
+      orConditions.push({ phone_number: createDto.phone_number });
+    }
     if (createDto.email) {
       orConditions.push({ email: createDto.email });
     }
-    const existingStudent = await this.studentModel.findOne({
-      where: { [Op.or]: orConditions },
-    });
+    if (orConditions.length > 0) {
+      const existingStudent = await this.studentModel.findOne({
+        where: { [Op.or]: orConditions },
+      });
 
-    if (existingStudent) {
-      if (existingStudent.phone_number === createDto.phone_number)
-        throw new ConflictException('Bu telefon nomer bilan student allaqachon mavjud');
-      if (createDto.email && existingStudent.email === createDto.email)
-        throw new ConflictException('Bu email bilan student allaqachon mavjud');
+      if (existingStudent) {
+        if (createDto.phone_number && existingStudent.phone_number === createDto.phone_number)
+          throw new ConflictException('Bu telefon nomer bilan student allaqachon mavjud');
+        if (createDto.email && existingStudent.email === createDto.email)
+          throw new ConflictException('Bu email bilan student allaqachon mavjud');
+      }
     }
 
     if (center_id) {

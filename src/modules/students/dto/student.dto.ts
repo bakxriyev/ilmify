@@ -168,6 +168,9 @@ export class StudentQueryDto {
 
   @ApiPropertyOptional()
   max_age?: string;
+
+  @ApiPropertyOptional()
+  phone_number_empty?: string;
 }
 
 export class StudentResponseDto {

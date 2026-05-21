@@ -217,7 +217,16 @@ export class StudentService {
         whereClause.phone_number = { [Op.iLike]: `%${queryDto.phone_number}%` };
     }
 
-    if (queryDto.group_id) whereClause.group_id = parseInt(queryDto.group_id);
+    if (queryDto.group_id === 'notnull') {
+      whereClause.group_id = { [Op.ne]: null };
+    } else if (queryDto.group_id === '0') {
+      whereClause.group_id = null;
+    } else if (queryDto.group_id) {
+      whereClause.group_id = parseInt(queryDto.group_id as string);
+    }
+    if (queryDto.phone_number_empty === 'true') {
+      whereClause.phone_number = { [Op.or]: [null, ''] };
+    }
     if (queryDto.min_age || queryDto.max_age) {
       whereClause.age = {};
       if (queryDto.min_age) whereClause.age[Op.gte] = parseInt(queryDto.min_age);

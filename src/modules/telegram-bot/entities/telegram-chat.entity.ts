@@ -1,4 +1,4 @@
-import { Table, Model, Column, DataType, ForeignKey, BelongsTo, CreatedAt } from 'sequelize-typescript';
+import { Table, Model, Column, DataType, ForeignKey, BelongsTo } from 'sequelize-typescript';
 import { EducationCenterModel } from '../../education-centers/entities/education-center.entity';
 import { StudentModel } from '../../students/model/student.entity';
 
@@ -39,6 +39,6 @@ export class TelegramChatModel extends Model {
   @Column({ type: DataType.BOOLEAN, defaultValue: true })
   is_active: boolean;
 
-  @CreatedAt
+  @Column({ type: DataType.DATE, defaultValue: DataType.NOW })
   created_at: Date;
 }

@@ -1,4 +1,4 @@
-import { Table, Model, Column, DataType, ForeignKey, BelongsTo, CreatedAt } from 'sequelize-typescript';
+import { Table, Model, Column, DataType, ForeignKey, BelongsTo } from 'sequelize-typescript';
 import { EducationCenterModel } from '../../education-centers/entities/education-center.entity';
 
 @Table({ tableName: 'telegram_messages', timestamps: true, createdAt: 'created_at', updatedAt: false })
@@ -28,6 +28,6 @@ export class TelegramMessageModel extends Model {
   @Column({ type: DataType.BIGINT, allowNull: true })
   reply_to_id: number;
 
-  @CreatedAt
+  @Column({ type: DataType.DATE, defaultValue: DataType.NOW })
   created_at: Date;
 }

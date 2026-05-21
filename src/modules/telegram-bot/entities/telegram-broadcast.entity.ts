@@ -1,4 +1,4 @@
-import { Table, Model, Column, DataType, ForeignKey, BelongsTo, CreatedAt } from 'sequelize-typescript';
+import { Table, Model, Column, DataType, ForeignKey, BelongsTo } from 'sequelize-typescript';
 import { EducationCenterModel } from '../../education-centers/entities/education-center.entity';
 import { TelegramTemplateModel } from './telegram-template.entity';
 
@@ -42,7 +42,7 @@ export class TelegramBroadcastModel extends Model {
   @Column({ type: DataType.STRING, defaultValue: 'pending' })
   status: string;
 
-  @CreatedAt
+  @Column({ type: DataType.DATE, defaultValue: DataType.NOW })
   created_at: Date;
 
   @Column({ type: DataType.DATE, allowNull: true })

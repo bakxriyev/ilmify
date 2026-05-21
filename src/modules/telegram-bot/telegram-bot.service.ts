@@ -58,7 +58,7 @@ export class TelegramBotService {
   }
 
   // ─── Chats ───────────────────────────────────────────────
-  async getChats(centerId: number, search?: string): Promise<TelegramChatModel[]> {
+  async getChats(centerId: number, search?: string): Promise<any[]> {
     const where: any = { center_id: centerId };
     if (search) {
       where[Op.or] = [
@@ -68,7 +68,54 @@ export class TelegramBotService {
         { username: { [Op.iLike]: `%${search}%` } },
       ];
     }
-    return this.chatModel.findAll({ where, order: [['created_at', 'DESC']] });
+    const chats = await this.chatModel.findAll({
+      where,
+      order: [['created_at', 'DESC']],
+    });
+    const result = [];
+    for (const c of chats) {
+      const item: any = c.toJSON();
+      if (item.student_id) {
+        try {
+          const student = await this.studentModel.findByPk(item.student_id, {
+            attributes: ['id', 'first_name', 'last_name', 'phone_number'],
+          });
+          if (student) {
+            item.student_name = `${student.first_name} ${student.last_name || ''}`.trim();
+            item.student_phone = student.phone_number;
+          }
+        } catch {}
+      }
+      result.push(item);
+    }
+    return result;
+  }
+
+  async deleteChat(centerId: number, chatId: number): Promise<{ deleted: boolean }> {
+    const deleted = await this.chatModel.destroy({
+      where: { center_id: centerId, chat_id: chatId },
+    });
+    await this.messageModel.destroy({
+      where: { center_id: centerId, chat_id: chatId },
+    });
+    return { deleted: deleted > 0 };
+  }
+
+  async deleteAllChats(centerId: number): Promise<{ deleted: number }> {
+    const chats = await this.chatModel.findAll({
+      where: { center_id: centerId },
+      attributes: ['chat_id'],
+    });
+    const chatIds = chats.map(c => c.chat_id);
+    if (chatIds.length === 0) return { deleted: 0 };
+
+    const msgDeleted = await this.messageModel.destroy({
+      where: { center_id: centerId, chat_id: { [Op.in]: chatIds } },
+    });
+    const chatDeleted = await this.chatModel.destroy({
+      where: { center_id: centerId },
+    });
+    return { deleted: chatDeleted };
   }
 
   // ─── Inbox ───────────────────────────────────────────────
@@ -275,15 +322,15 @@ export class TelegramBotService {
     });
   }
 
-  async getStudentByPhone(phone_number: string): Promise<StudentModel | null> {
+  async getStudentByPhone(centerId: number, phone_number: string): Promise<StudentModel | null> {
     return this.studentModel.findOne({
-      where: { phone_number },
+      where: { phone_number, center_id: centerId },
       attributes: ['id', 'first_name', 'last_name', 'phone_number', 'center_id', 'password'],
     });
   }
 
-  async verifyPassword(phone_number: string, password: string): Promise<{ success: boolean; student?: any }> {
-    const student = await this.getStudentByPhone(phone_number);
+  async verifyPassword(centerId: number, phone_number: string, password: string): Promise<{ success: boolean; student?: any }> {
+    const student = await this.getStudentByPhone(centerId, phone_number);
     if (!student || student.password !== password) return { success: false };
     return { success: true, student: student.toJSON() };
   }

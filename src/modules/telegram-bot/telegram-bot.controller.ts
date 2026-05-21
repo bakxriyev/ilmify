@@ -15,18 +15,12 @@ export class TelegramBotController {
   }
 
   @Post(':centerId/incoming')
-  async incomingMessage(
-    @Param('centerId') centerId: string,
-    @Body() body: { chat_id: number; text: string; first_name?: string; last_name?: string; username?: string },
-  ) {
+  async incomingMessage(@Param('centerId') centerId: string, @Body() body: any) {
     return this.service.handleIncomingMessage(Number(centerId), body);
   }
 
   @Post(':centerId/contact-admin')
-  async contactAdmin(
-    @Param('centerId') centerId: string,
-    @Body() body: { chat_id: number; text: string },
-  ) {
+  async contactAdmin(@Param('centerId') centerId: string, @Body() body: any) {
     return this.service.contactAdmin(Number(centerId), body.chat_id, body.text);
   }
 
@@ -37,19 +31,17 @@ export class TelegramBotController {
   }
 
   @Post(':centerId/check-phone')
-  async checkPhone(@Param('centerId') centerId: string, @Body() body: { phone: string }) {
+  async checkPhone(@Param('centerId') centerId: string, @Body() body: any) {
     return this.service.checkPhone(Number(centerId), body.phone);
   }
 
   @Post(':centerId/verify-password')
-  async verifyPassword(@Param('centerId') centerId: string, @Body() body: { phone: string; password: string }) {
-    return this.service.verifyPassword(body.phone, body.password);
+  async verifyPassword(@Param('centerId') centerId: string, @Body() body: any) {
+    return this.service.verifyPassword(Number(centerId), body.phone, body.password);
   }
 
   @Post(':centerId/link-student')
-  async linkStudent(@Param('centerId') centerId: string, @Body() body: {
-    chat_id: number; student_id: number; first_name?: string; last_name?: string; username?: string;
-  }) {
+  async linkStudent(@Param('centerId') centerId: string, @Body() body: any) {
     return this.service.linkStudent(Number(centerId), body);
   }
 
@@ -91,7 +83,7 @@ export class TelegramBotController {
   }
 
   @Put(':centerId/config')
-  async updateConfig(@Param('centerId') centerId: string, @Body() body: { bot_token?: string; is_active?: boolean }) {
+  async updateConfig(@Param('centerId') centerId: string, @Body() body: any) {
     return this.service.updateBotConfig(Number(centerId), body);
   }
 
@@ -101,6 +93,16 @@ export class TelegramBotController {
     return this.service.getChats(Number(centerId), search);
   }
 
+  @Delete(':centerId/chats/:chatId')
+  async deleteChat(@Param('centerId') centerId: string, @Param('chatId') chatId: string) {
+    return this.service.deleteChat(Number(centerId), Number(chatId));
+  }
+
+  @Delete(':centerId/chats')
+  async deleteAllChats(@Param('centerId') centerId: string) {
+    return this.service.deleteAllChats(Number(centerId));
+  }
+
   // ─── Inbox ───────────────────────────────────────────────
   @Get(':centerId/inbox')
   async getInbox(@Param('centerId') centerId: string, @Query('search') search?: string) {
@@ -108,7 +110,7 @@ export class TelegramBotController {
   }
 
   @Post(':centerId/reply')
-  async sendReply(@Param('centerId') centerId: string, @Body() body: { chat_id: number; text: string }) {
+  async sendReply(@Param('centerId') centerId: string, @Body() body: any) {
     return this.service.sendReply(Number(centerId), body.chat_id, body.text);
   }
 
@@ -119,12 +121,12 @@ export class TelegramBotController {
   }
 
   @Post(':centerId/templates')
-  async createTemplate(@Param('centerId') centerId: string, @Body() body: { name: string; content: string }) {
+  async createTemplate(@Param('centerId') centerId: string, @Body() body: any) {
     return this.service.createTemplate(Number(centerId), body);
   }
 
   @Put('templates/:id')
-  async updateTemplate(@Param('id') id: string, @Body() body: { name?: string; content?: string }) {
+  async updateTemplate(@Param('id') id: string, @Body() body: any) {
     return this.service.updateTemplate(Number(id), body);
   }
 
@@ -140,10 +142,7 @@ export class TelegramBotController {
   }
 
   @Post(':centerId/send')
-  async sendMessage(@Param('centerId') centerId: string, @Body() body: {
-    target_type: string; target_id?: number; text: string; template_id?: number;
-  }) {
-    if (!body.text) body.text = '';
+  async sendMessage(@Param('centerId') centerId: string, @Body() body: any) {
     return this.service.sendMessage(Number(centerId), body);
   }
 }

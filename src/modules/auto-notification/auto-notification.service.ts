@@ -8,6 +8,7 @@ import { BotManagerService } from '../telegram-bot/bot-manager.service';
 import { NotificationService } from '../notification/notification.service';
 import { StudentModel } from '../students/model/student.entity';
 import { GroupModel } from '../groups/model/group.entity';
+import { GroupStudentModel } from '../group_student_model';
 import { TelegramChatModel } from '../telegram-bot/entities/telegram-chat.entity';
 import { PaymentModel } from '../payments/entities/payment.entity';
 
@@ -22,6 +23,8 @@ export class AutoNotificationService {
     private logModel: typeof AutoNotificationLogModel,
     @InjectModel(StudentModel)
     private studentModel: typeof StudentModel,
+    @InjectModel(GroupStudentModel)
+    private groupStudentModel: typeof GroupStudentModel,
     @InjectModel(TelegramChatModel)
     private chatModel: typeof TelegramChatModel,
     @InjectModel(PaymentModel)
@@ -83,12 +86,13 @@ export class AutoNotificationService {
     const year = now.getFullYear();
     const month = now.getMonth() + 1;
 
-    const unpaidPayments = await this.paymentModel.findAll({
-      where: { month, year, status: { [Op.ne]: 'paid' } },
+    // 1. Find all groups with monthly_price > 0 for this center
+    const groups = await this.groupModel.findAll({
+      where: { center_id: centerId, monthly_price: { [Op.gt]: 0 } },
+      attributes: ['id', 'name', 'monthly_price'],
     });
-
-    if (unpaidPayments.length === 0) {
-      this.logger.log(`Center ${centerId}: ${year}-${month} da to'lov qilmagan student yo'q`);
+    if (groups.length === 0) {
+      this.logger.log(`Center ${centerId}: Oylik narxi bo'lgan guruh topilmadi`);
       await this.logModel.create({
         center_id: centerId,
         student_id: 0,
@@ -96,16 +100,52 @@ export class AutoNotificationService {
         scheduled_time: now,
         telegram_sent: false,
         delivered: false,
-        message_text: 'To\'lov qilmagan student topilmadi',
+        message_text: 'Oylik narxi bo\'lgan guruh topilmadi',
       });
       return;
     }
 
-    const allStudentIds = [...new Set(unpaidPayments.map(p => Number(p.student_id)))];
+    const groupIds = groups.map(g => Number(g.id));
+    const groupMap = new Map<number, { name: string; monthly_price: number }>();
+    for (const g of groups) {
+      groupMap.set(Number(g.id), { name: g.name, monthly_price: Number(g.monthly_price) });
+    }
+
+    // 2. Find all students in those groups
+    const groupStudents = await this.groupStudentModel.findAll({
+      where: { group_id: groupIds },
+      attributes: ['student_id', 'group_id'],
+    });
+    if (groupStudents.length === 0) {
+      this.logger.log(`Center ${centerId}: Guruhlarga biriktirilgan student yo'q`);
+      await this.logModel.create({
+        center_id: centerId,
+        student_id: 0,
+        notification_type: config.notification_type,
+        scheduled_time: now,
+        telegram_sent: false,
+        delivered: false,
+        message_text: 'Guruhlarga biriktirilgan student yo\'q',
+      });
+      return;
+    }
+
+    // student_id -> group_id mapping (take first group if multiple)
+    const studentToGroupMap = new Map<number, number>();
+    for (const gs of groupStudents) {
+      const sid = Number(gs.student_id);
+      if (!studentToGroupMap.has(sid)) {
+        studentToGroupMap.set(sid, Number(gs.group_id));
+      }
+    }
+
+    const allStudentIds = [...studentToGroupMap.keys()];
+
+    // 3. Get student details (filter by center_id and isActive)
     const students = await this.studentModel.findAll({
       where: { id: allStudentIds, center_id: centerId, isActive: true },
+      attributes: ['id', 'first_name', 'last_name', 'phone_number'],
     });
-
     if (students.length === 0) {
       this.logger.log(`Center ${centerId}: Faol student topilmadi`);
       await this.logModel.create({
@@ -120,35 +160,77 @@ export class AutoNotificationService {
       return;
     }
 
-    const paymentMap = new Map<number, { amount: number; group_id: number | null }>();
-    for (const p of unpaidPayments) {
+    const activeStudentIds = students.map(s => Number(s.id));
+
+    // 4. Get payments for these students for current month
+    const payments = await this.paymentModel.findAll({
+      where: { month, year, student_id: activeStudentIds },
+    });
+
+    // Build payment map: student_id -> { amount, group_id, status }
+    const paymentMap = new Map<number, { amount: number; group_id: number | null; status: string }>();
+    for (const p of payments) {
       const sid = Number(p.student_id);
       if (!paymentMap.has(sid)) {
-        paymentMap.set(sid, { amount: Number(p.amount), group_id: p.group_id ? Number(p.group_id) : null });
+        paymentMap.set(sid, {
+          amount: Number(p.amount),
+          group_id: p.group_id ? Number(p.group_id) : null,
+          status: p.status,
+        });
       }
     }
 
-    const groupIds = [...new Set(unpaidPayments.map(p => p.group_id).filter(Boolean).map(Number))];
-    const groupMap = new Map<number, string>();
-    if (groupIds.length > 0) {
-      const groups = await this.groupModel.findAll({ where: { id: groupIds }, attributes: ['id', 'name'] });
-      for (const g of groups) {
-        groupMap.set(Number(g.id), g.name);
+    // 5. For each student, determine if unpaid and calculate debt
+    const unpaidStudents: Array<{
+      student: any;
+      debt: number;
+      groupName: string;
+    }> = [];
+
+    for (const student of students) {
+      const sid = Number(student.id);
+      const gid = studentToGroupMap.get(sid);
+      const groupInfo = gid ? groupMap.get(gid) : null;
+      const monthlyPrice = groupInfo?.monthly_price || 0;
+      const paymentData = paymentMap.get(sid);
+
+      // Unpaid if: no payment record OR payment status is not 'paid'
+      const isPaid = paymentData && paymentData.status === 'paid';
+
+      if (!isPaid) {
+        const paidAmount = paymentData ? paymentData.amount : 0;
+        const debt = Math.max(0, monthlyPrice - paidAmount);
+        unpaidStudents.push({
+          student,
+          debt,
+          groupName: groupInfo?.name || '',
+        });
       }
     }
 
+    if (unpaidStudents.length === 0) {
+      this.logger.log(`Center ${centerId}: Barcha studentlar to'lov qilgan`);
+      await this.logModel.create({
+        center_id: centerId,
+        student_id: 0,
+        notification_type: config.notification_type,
+        scheduled_time: now,
+        telegram_sent: false,
+        delivered: false,
+        message_text: 'Barcha studentlar to\'lov qilgan',
+      });
+      return;
+    }
+
+    // 6. Send notifications
     let sentCount = 0;
     let failedCount = 0;
     let noTelegramCount = 0;
 
-    for (const student of students) {
-      const studentJson = student.toJSON();
-      const sid = Number(studentJson.id);
-      const paymentData = paymentMap.get(sid);
-      const groupName = paymentData?.group_id ? (groupMap.get(paymentData.group_id) || '') : '';
-      const summa = paymentData ? Math.floor(paymentData.amount).toLocaleString() : '0';
-
-      const messageText = this.replacePlaceholders(template, studentJson, groupName, summa);
+    for (const { student, debt, groupName } of unpaidStudents) {
+      const sid = Number(student.id);
+      const summa = Math.floor(debt).toLocaleString();
+      const messageText = this.replacePlaceholders(template, student, groupName, summa);
 
       const chat = await this.chatModel.findOne({
         where: { student_id: sid, center_id: centerId },

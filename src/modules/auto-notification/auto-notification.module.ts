@@ -7,6 +7,7 @@ import { AutoNotificationLogModel } from './entities/auto-notification-log.entit
 import { TelegramBotModule } from '../telegram-bot/telegram-bot.module';
 import { NotificationModule } from '../notification/notification.module';
 import { StudentModel } from '../students/model/student.entity';
+import { GroupStudentModel } from '../group_student_model';
 import { TelegramChatModel } from '../telegram-bot/entities/telegram-chat.entity';
 import { PaymentModel } from '../payments/entities/payment.entity';
 import { GroupModel } from '../groups/model/group.entity';
@@ -18,6 +19,7 @@ import { GroupModel } from '../groups/model/group.entity';
       AutoNotificationLogModel,
       StudentModel,
       GroupModel,
+      GroupStudentModel,
       TelegramChatModel,
       PaymentModel,
     ]),

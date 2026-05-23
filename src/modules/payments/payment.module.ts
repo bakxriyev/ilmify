@@ -7,6 +7,7 @@ import { PaymentModel } from './entities/payment.entity';
 import { StudentModel } from '../students/model/student.entity';
 import { GroupModel } from '../groups/model/group.entity';
 import { GroupStudentModel } from '../group_student_model';
+import { GroupLessonModel } from '../group-lesson/entities/group-lesson.entity';
 import { ParentStudentModel } from '../parents/entities/parent-student.entity';
 import { ParentModel } from '../parents/entities/parent.entity';
 import { NotificationModule } from '../notification/notification.module';
@@ -14,7 +15,7 @@ import { EducationCenterModel } from '../education-centers/entities/education-ce
 
 @Module({
   imports: [
-    SequelizeModule.forFeature([PaymentModel, StudentModel, GroupModel, GroupStudentModel, ParentStudentModel, ParentModel, EducationCenterModel]),
+    SequelizeModule.forFeature([PaymentModel, StudentModel, GroupModel, GroupStudentModel, GroupLessonModel, ParentStudentModel, ParentModel, EducationCenterModel]),
     NotificationModule,
   ],
   controllers: [PaymentController],

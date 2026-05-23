@@ -22,6 +22,7 @@ import {
 } from '@nestjs/swagger';
 import { GroupService } from './groups.service';
 import { CreateGroupDto, UpdateGroupDto, QueryGroupDto } from './dto';
+import { GenerateLessonsDto } from './dto/generate-lessons.dto';
 
 @ApiTags('Groups')
 @Controller('groups')
@@ -322,6 +323,25 @@ async create(@Body() createGroupDto: CreateGroupDto, @Req() req?: any) {
 
 async getLessons(@Param('id', ParseIntPipe) groupId: number) {
   const group = await this.groupService.findOne(groupId);
-  return group.lessons; // lessons array
+  return group.lessons;
+}
+
+@Post(':id/generate-lessons')
+@HttpCode(HttpStatus.CREATED)
+@ApiOperation({ summary: 'Guruhga darslar yaratish', description: 'Start date, duration, parity va time berilsa, darslar avtomatik yaratiladi' })
+async generateLessons(
+  @Param('id', ParseIntPipe) groupId: number,
+  @Body() dto: GenerateLessonsDto,
+) {
+  return this.groupService.generateLessons(
+    groupId,
+    dto.start_date,
+    dto.duration_months,
+    dto.time,
+    dto.parity as 'odd' | 'even',
+    dto.room_id,
+    dto.start_time,
+    dto.end_time,
+  );
 }
 }

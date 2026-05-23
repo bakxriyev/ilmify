@@ -8,6 +8,7 @@ import { AttendanceModel } from './model/attendence.entity';
 import { GroupLessonModel } from '../group-lesson/entities/group-lesson.entity';
 import { StudentModel } from '../students/model/student.entity';
 import { GroupModel } from '../groups/model/group.entity';
+import { GroupStudentModel } from '../group_student_model';
 import { Op } from 'sequelize';
 import { MarkLessonAttendanceDto } from './dto/mark-attendance.dto';
 
@@ -25,6 +26,9 @@ export class AttendanceService {
 
     @InjectModel(GroupModel)
     private groupRepo: typeof GroupModel,
+
+    @InjectModel(GroupStudentModel)
+    private groupStudentRepo: typeof GroupStudentModel,
   ) {}
 
   private normalizeDate(date: string) {
@@ -139,7 +143,7 @@ export class AttendanceService {
     });
 
     if (!lessons.length) {
-      return { lessons: [], attendance: [] };
+      return { lessons: [], attendance: [], student_join_dates: {} };
     }
 
     const lessonIds = lessons.map((l) => l.id);
@@ -148,6 +152,18 @@ export class AttendanceService {
       where: { lesson_id: lessonIds },
       attributes: ['id', 'lesson_id', 'student_id', 'is_present', 'reason'],
     });
+
+    // Get student join dates for the group
+    let studentJoinDates: Record<number, string> = {};
+    try {
+      const groupStudents = await this.groupStudentRepo.findAll({
+        where: { group_id },
+        attributes: ['student_id', 'joined_date'],
+      });
+      for (const gs of groupStudents) {
+        studentJoinDates[Number(gs.student_id)] = gs.joined_date ? new Date(gs.joined_date).toISOString().split('T')[0] : '';
+      }
+    } catch {}
 
     const map: Record<number, Record<number, { is_present: boolean; reason?: string }>> = {};
     for (const a of attendance) {
@@ -163,6 +179,7 @@ export class AttendanceService {
         end_time: l.end_time,
       })),
       attendance: map,
+      student_join_dates: studentJoinDates,
     };
   }
 

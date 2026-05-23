@@ -383,6 +383,22 @@ async create(createGroupDto: CreateGroupDto, center_id?: number): Promise<GroupM
   
 
 
+async generateLessons(
+  groupId: number,
+  startDate: string,
+  durationMonths: number,
+  time: string,
+  parity: 'odd' | 'even',
+  room_id?: number,
+  start_time?: string,
+  end_time?: string,
+) {
+  const group = await this.groupModel.findByPk(groupId);
+  if (!group) throw new NotFoundException('Guruh topilmadi');
+  const lessons = await this.createLessons(groupId, startDate, durationMonths, time, parity, room_id, start_time, end_time);
+  return { created: lessons.length };
+}
+
 async createLessons(
   groupId: number,
   startDate: string,

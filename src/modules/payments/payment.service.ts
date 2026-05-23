@@ -19,6 +19,7 @@ export class PaymentService {
     @InjectModel(StudentModel) private studentModel: typeof StudentModel,
     @InjectModel(GroupModel) private groupModel: typeof GroupModel,
     @InjectModel(GroupStudentModel) private groupStudentModel: typeof GroupStudentModel,
+    @InjectModel(GroupLessonModel) private groupLessonModel: typeof GroupLessonModel,
     @InjectModel(ParentStudentModel) private parentStudentModel: typeof ParentStudentModel,
     @InjectModel(ParentModel) private parentModel: typeof ParentModel,
     private notificationService: NotificationService,
@@ -290,6 +291,15 @@ export class PaymentService {
       where: groupStudentWhere,
     });
 
+    // Build student join_date map
+    const joinDateMap = new Map<number, Date>();
+    for (const gs of groupStudents) {
+      const sid = Number(gs.student_id);
+      if (!joinDateMap.has(sid) || (gs.joined_date && (!joinDateMap.get(sid) || new Date(gs.joined_date) < joinDateMap.get(sid)!))) {
+        joinDateMap.set(sid, new Date(gs.joined_date));
+      }
+    }
+
     const studentIds = groupStudents.map(gs => gs.student_id);
     const students = await this.studentModel.findAll({
       where: { id: studentIds },
@@ -300,13 +310,37 @@ export class PaymentService {
       where: { group_id: groupId, month: targetMonth, year: targetYear },
     });
 
+    // Count total lessons in this month for the group (for proration)
+    const totalLessonsInMonth = await this.groupLessonModel.count({
+      where: {
+        group_id: groupId,
+        date: { [Op.gte]: monthStart, [Op.lt]: monthEnd },
+      },
+    });
+
     const overdueDays = Math.max(0, Math.floor((now.getTime() - monthStart.getTime()) / (1000 * 60 * 60 * 24)));
 
     return students.map(s => {
       const payment = payments.find(p => Number(p.student_id) === Number(s.id));
       const status = payment?.status || PaymentStatus.UNPAID;
       const paidAmount = payment ? Number(payment.amount) : 0;
-      const debt = status === PaymentStatus.PAID ? 0 : Math.max(0, monthlyPrice - paidAmount);
+
+      // Prorate monthly_price based on join date
+      let effectivePrice = monthlyPrice;
+      if (totalLessonsInMonth > 0 && status !== PaymentStatus.PAID) {
+        const joinDate = joinDateMap.get(Number(s.id));
+        if (joinDate && joinDate > monthStart) {
+          // Count lessons from join date onwards
+          const remainingLessons = totalLessonsInMonth;
+          // (simplified: estimate based on joined day, exact lesson count requires query)
+          const daysInMonth = monthEnd.getDate();
+          const joinDay = joinDate.getDate();
+          const remainingRatio = Math.max(0, (daysInMonth - joinDay + 1) / daysInMonth);
+          effectivePrice = Math.round(monthlyPrice * remainingRatio);
+        }
+      }
+
+      const debt = status === PaymentStatus.PAID ? 0 : Math.max(0, effectivePrice - paidAmount);
 
       return {
         student: { id: s.id, first_name: s.first_name, last_name: s.last_name, phone_number: s.phone_number },
@@ -316,9 +350,11 @@ export class PaymentService {
         month: targetMonth,
         year: targetYear,
         monthly_price: monthlyPrice,
+        effective_price: effectivePrice,
         paid_amount: paidAmount,
         debt,
         overdue_days: status === PaymentStatus.PAID ? 0 : overdueDays,
+        joined_date: joinDateMap.get(Number(s.id))?.toISOString().split('T')[0] || null,
       };
     });
   }

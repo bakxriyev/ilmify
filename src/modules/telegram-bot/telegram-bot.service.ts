@@ -72,8 +72,21 @@ export class TelegramBotService {
       where,
       order: [['created_at', 'DESC']],
     });
-    const result = [];
+
+    // Deduplicate by chat_id — keep the record with student_id linked (prefer that),
+    // otherwise keep the most recent one
+    const best = new Map<number, any>();
     for (const c of chats) {
+      const key = Number(c.chat_id);
+      const existing = best.get(key);
+      // Prefer record that has student_id linked, else the most recent
+      if (!existing || (c.student_id && !existing.student_id)) {
+        best.set(key, c);
+      }
+    }
+
+    const result = [];
+    for (const c of best.values()) {
       const item: any = c.toJSON();
       if (item.student_id) {
         try {

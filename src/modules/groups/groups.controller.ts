@@ -338,7 +338,7 @@ async generateLessons(
     dto.start_date,
     dto.duration_months,
     dto.time,
-    dto.parity as 'odd' | 'even',
+    dto.parity as 'odd' | 'even' | 'both',
     dto.room_id,
     dto.start_time,
     dto.end_time,

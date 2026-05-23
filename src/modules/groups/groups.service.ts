@@ -388,7 +388,7 @@ async generateLessons(
   startDate: string,
   durationMonths: number,
   time: string,
-  parity: 'odd' | 'even',
+  parity: 'odd' | 'even' | 'both',
   room_id?: number,
   start_time?: string,
   end_time?: string,
@@ -416,7 +416,15 @@ async createLessons(
 
   // parity "odd" -> Dushanba, Chorshanba, Juma (1,3,5)
   // parity "even" -> Seshanba, Payshanba, Shanba (2,4,6)
-  const selectedDays = parity === 'odd' ? [1, 3, 5] : [2, 4, 6];
+  // parity "both" -> Dushanba - Shanba (1-6)
+  let selectedDays: number[];
+  if (parity === 'odd') {
+    selectedDays = [1, 3, 5];
+  } else if (parity === 'even') {
+    selectedDays = [2, 4, 6];
+  } else {
+    selectedDays = [1, 2, 3, 4, 5, 6];
+  }
 
   let current = new Date(start);
 

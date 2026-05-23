@@ -53,10 +53,10 @@ export class CreateGroupDto {
   @IsString()
   end_time?: string;
 
-  @ApiProperty({ description: 'Toq/juft hafta', example: 'odd', enum: ['odd','even'], required: false })
+  @ApiProperty({ description: 'Toq/juft hafta', example: 'odd', enum: ['odd','even','both'], required: false })
   @IsOptional()
-  @IsEnum(['odd','even'])
-  parity?: 'odd' | 'even';
+  @IsEnum(['odd','even','both'])
+  parity?: 'odd' | 'even' | 'both';
 
   @ApiProperty({ description: 'Oylik tolov narxi', example: 200000, required: false })
   @IsOptional()

@@ -16,7 +16,7 @@ export class GenerateLessonsDto {
 
   @ApiProperty({ description: 'Kunlar: odd (1,3,5) yoki even (2,4,6)' })
   @IsString()
-  @IsIn(['odd', 'even'])
+  @IsIn(['odd', 'even', 'both'])
   parity: string;
 
   @ApiPropertyOptional({ description: 'Boshlanish vaqti' })

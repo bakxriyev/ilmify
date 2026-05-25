@@ -7,7 +7,7 @@ export enum ApplicationStatus {
   REJECTED = 'rejected',
 }
 
-@Table({ tableName: 'center_applications', timestamps: true })
+@Table({ tableName: 'center_applications', timestamps: true, createdAt: 'created_at', updatedAt: false })
 export class CenterApplicationModel extends Model {
   @Column({ type: DataType.BIGINT, autoIncrement: true, primaryKey: true })
   id: number;

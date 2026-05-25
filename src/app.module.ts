@@ -80,6 +80,8 @@ import { AutoNotificationLogModel } from './modules/auto-notification/entities/a
 import { SmsModule } from './modules/sms/sms.module';
 import { SmsLogModel } from './modules/sms/entities/sms-log.entity';
 import { SmsTemplateModel } from './modules/sms/entities/sms-template.entity';
+import { CenterApplicationsModule } from './modules/center-applications/center-applications.module';
+import { CenterApplicationModel } from './modules/center-applications/entities/center-application.entity';
 
 @Module({
   imports: [
@@ -105,7 +107,7 @@ import { SmsTemplateModel } from './modules/sms/entities/sms-template.entity';
             username: config.get<string>('databaseConfig.user'),
             password: config.get<string>('databaseConfig.password'),
             database: config.get<string>('databaseConfig.dbname'),
-            models: [TariffModel, TeacherModel,LevelModel,AdminModel,UserDeviceModel,GroupLessonModel,RedoIncorrectTaskModel, StudentModel,GroupModel,GroupStudentModel,AttendanceModel,UnitModel,ExerciseModel,TaskModel,StudentAnswerModel,ExerciseResultModel,VocabModel,VocabAnswerModel,VocabResultModel,UnitResultModel,StudentCoinsModel,TeacherCoinLogModel,TaskCoinLogModel,ChatRoomModel,ChatMessageModel,MessageStatusModel,ParentModel,ParentStudentModel,RoomModel,PaymentModel,EducationCenterModel,CenterBranchModel,LeadModel,LeadSourceModel,TelegramSettingsModel,TelegramBotModel,TelegramChatModel,TelegramMessageModel,TelegramTemplateModel,TelegramBroadcastModel,AutoNotificationConfigModel,AutoNotificationLogModel,SmsLogModel,SmsTemplateModel],
+            models: [TariffModel, TeacherModel,LevelModel,AdminModel,UserDeviceModel,GroupLessonModel,RedoIncorrectTaskModel, StudentModel,GroupModel,GroupStudentModel,AttendanceModel,UnitModel,ExerciseModel,TaskModel,StudentAnswerModel,ExerciseResultModel,VocabModel,VocabAnswerModel,VocabResultModel,UnitResultModel,StudentCoinsModel,TeacherCoinLogModel,TaskCoinLogModel,ChatRoomModel,ChatMessageModel,MessageStatusModel,ParentModel,ParentStudentModel,RoomModel,PaymentModel,EducationCenterModel,CenterBranchModel,LeadModel,LeadSourceModel,TelegramSettingsModel,TelegramBotModel,TelegramChatModel,TelegramMessageModel,TelegramTemplateModel,TelegramBroadcastModel,AutoNotificationConfigModel,AutoNotificationLogModel,SmsLogModel,SmsTemplateModel,CenterApplicationModel],
             sync: { alter: true },
             synchronize: true,
             logging: console.log,
@@ -159,6 +161,7 @@ import { SmsTemplateModel } from './modules/sms/entities/sms-template.entity';
     TelegramBotModule,
     AutoNotificationModule,
     SmsModule,
+    CenterApplicationsModule,
   ],
   controllers: [
   ],

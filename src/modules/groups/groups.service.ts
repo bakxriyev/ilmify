@@ -294,7 +294,7 @@ async create(createGroupDto: CreateGroupDto, center_id?: number): Promise<GroupM
     return relations.map(r => r.student).filter(Boolean) as StudentModel[];
   }
 
-  async addStudentToGroup(groupId: number, studentId: number): Promise<GroupStudentModel> {
+  async addStudentToGroup(groupId: number, studentId: number, joined_date?: string): Promise<GroupStudentModel> {
     await this.findOne(groupId); // Guruh borligini tekshirish
 
     // Student allaqachon guruhda emasligini tekshirish
@@ -309,7 +309,7 @@ async create(createGroupDto: CreateGroupDto, center_id?: number): Promise<GroupM
     return this.groupStudentModel.create({
       group_id: groupId,
       student_id: studentId,
-      joined_date: new Date(),
+      joined_date: joined_date ? new Date(joined_date) : new Date(),
     });
   }
 

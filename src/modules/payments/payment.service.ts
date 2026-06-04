@@ -170,10 +170,21 @@ export class PaymentService {
       }
     }
 
-    // 4. Status va qarzdorlikni hisoblash
+    // 4. Barcha guruhlar uchun oylik darslar sonini oldindan hisoblaymiz (proration uchun)
+    const groupIds = [...new Set(relations.map(r => Number(r.group_id)))];
+    const totalLessonsPerGroup = new Map<number, number>();
+    for (const gid of groupIds) {
+      const count = await this.groupLessonModel.count({
+        where: { group_id: gid, date: { [Op.gte]: monthStart, [Op.lt]: monthEnd } },
+      });
+      totalLessonsPerGroup.set(gid, count);
+    }
+
     const result: any[] = [];
     for (const [, entry] of studentMap) {
       const monthlyPrice = entry.group.monthly_price;
+      const groupId = entry.relationGroupId;
+      const totalLessons = totalLessonsPerGroup.get(groupId) || 0;
 
       // Studentning shu oydagi barcha to'lovlarini topamiz (istalgan guruh bo'yicha)
       const studentPayments = allPayments.filter(p => Number(p.student_id) === entry.student.id);
@@ -182,15 +193,32 @@ export class PaymentService {
         new Date(p.created_at) > new Date(latest.created_at) ? p : latest
       ) : null;
 
+      // Proratsiya: o'quvchi qo'shilgan sanadan boshlab qolgan darslar soniga qarab narxni hisoblash
+      const relation = relations.find(r => Number(r.student_id) === entry.student.id && Number(r.group_id) === groupId);
+      let effectivePrice = monthlyPrice;
+      if (totalLessons > 0 && relation) {
+        const joinDate = new Date(relation.joined_date);
+        if (joinDate > monthStart) {
+          const remainingLessons = await this.groupLessonModel.count({
+            where: { group_id: groupId, date: { [Op.gte]: joinDate, [Op.lt]: monthEnd } },
+          });
+          if (remainingLessons > 0) {
+            effectivePrice = Math.round((monthlyPrice / totalLessons) * remainingLessons);
+          } else {
+            effectivePrice = 0;
+          }
+        }
+      }
+
       // Status: to'lov summasiga qarab
       let status = PaymentStatus.UNPAID;
-      if (totalPaidAmount >= monthlyPrice && monthlyPrice > 0) {
+      if (totalPaidAmount >= effectivePrice && effectivePrice > 0) {
         status = PaymentStatus.PAID;
       } else if (totalPaidAmount > 0) {
         status = PaymentStatus.PARTIAL;
       }
 
-      const debt = Math.max(0, monthlyPrice - totalPaidAmount);
+      const debt = Math.max(0, effectivePrice - totalPaidAmount);
 
       result.push({
         student: entry.student,
@@ -200,6 +228,7 @@ export class PaymentService {
         month,
         year,
         monthly_price: monthlyPrice,
+        effective_price: effectivePrice,
         paid_amount: totalPaidAmount,
         debt,
         overdue_days: status === PaymentStatus.PAID ? 0 : overdueDays,
@@ -320,23 +349,29 @@ export class PaymentService {
 
     const overdueDays = Math.max(0, Math.floor((now.getTime() - monthStart.getTime()) / (1000 * 60 * 60 * 24)));
 
-    return students.map(s => {
+    return Promise.all(students.map(async (s) => {
       const payment = payments.find(p => Number(p.student_id) === Number(s.id));
       const status = payment?.status || PaymentStatus.UNPAID;
       const paidAmount = payment ? Number(payment.amount) : 0;
 
-      // Prorate monthly_price based on join date
+      // Prorate monthly_price based on remaining lessons from join date
       let effectivePrice = monthlyPrice;
       if (totalLessonsInMonth > 0 && status !== PaymentStatus.PAID) {
         const joinDate = joinDateMap.get(Number(s.id));
         if (joinDate && joinDate > monthStart) {
-          // Count lessons from join date onwards
-          const remainingLessons = totalLessonsInMonth;
-          // (simplified: estimate based on joined day, exact lesson count requires query)
-          const daysInMonth = monthEnd.getDate();
-          const joinDay = joinDate.getDate();
-          const remainingRatio = Math.max(0, (daysInMonth - joinDay + 1) / daysInMonth);
-          effectivePrice = Math.round(monthlyPrice * remainingRatio);
+          // Aniq: qo'shilgan sanadan boshlab oy oxirigacha nechta dars qolgan
+          const remainingLessons = await this.groupLessonModel.count({
+            where: {
+              group_id: groupId,
+              date: { [Op.gte]: joinDate, [Op.lt]: monthEnd },
+            },
+          });
+          if (remainingLessons > 0) {
+            const pricePerLesson = monthlyPrice / totalLessonsInMonth;
+            effectivePrice = Math.round(pricePerLesson * remainingLessons);
+          } else {
+            effectivePrice = 0;
+          }
         }
       }
 
@@ -356,7 +391,7 @@ export class PaymentService {
         overdue_days: status === PaymentStatus.PAID ? 0 : overdueDays,
         joined_date: joinDateMap.get(Number(s.id))?.toISOString().split('T')[0] || null,
       };
-    });
+    }));
   }
 
   async update(id: number, dto: UpdatePaymentDto) {
@@ -394,14 +429,43 @@ export class PaymentService {
     const now = new Date();
     const month = now.getMonth() + 1;
     const year = now.getFullYear();
+    const monthStart = new Date(year, month - 1, 1);
+    const monthEnd = new Date(year, month, 0, 23, 59, 59);
     const groups = await this.groupModel.findAll({ where: { monthly_price: { [Op.gt]: 0 } } });
     let created = 0;
     for (const group of groups) {
+      const monthlyPrice = Number(group.monthly_price);
+      // Oy uchun jami darslar soni
+      const totalLessonsInMonth = await this.groupLessonModel.count({
+        where: { group_id: group.id, date: { [Op.gte]: monthStart, [Op.lt]: monthEnd } },
+      });
       const relations = await this.groupStudentModel.findAll({ where: { group_id: group.id } });
       for (const rel of relations) {
         const exists = await this.paymentModel.findOne({ where: { student_id: rel.student_id, month, year } });
         if (!exists) {
-          await this.paymentModel.create({ student_id: rel.student_id, group_id: group.id, amount: group.monthly_price, month, year, status: PaymentStatus.UNPAID });
+          // Proratsiya: qo'shilgan sanadan qolgan darslar hisobiga
+          let amount = monthlyPrice;
+          if (totalLessonsInMonth > 0 && rel.joined_date) {
+            const joinDate = new Date(rel.joined_date);
+            if (joinDate > monthStart) {
+              const remainingLessons = await this.groupLessonModel.count({
+                where: { group_id: group.id, date: { [Op.gte]: joinDate, [Op.lt]: monthEnd } },
+              });
+              if (remainingLessons > 0) {
+                amount = Math.round((monthlyPrice / totalLessonsInMonth) * remainingLessons);
+              } else {
+                amount = 0;
+              }
+            }
+          }
+          await this.paymentModel.create({
+            student_id: rel.student_id,
+            group_id: group.id,
+            amount,
+            month,
+            year,
+            status: PaymentStatus.UNPAID,
+          });
           created++;
         }
       }

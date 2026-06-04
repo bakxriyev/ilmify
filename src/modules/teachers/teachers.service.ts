@@ -21,15 +21,94 @@ export class TeacherService {
     private groupStudentModel: typeof GroupStudentModel,
   ) {}
 
-  async findAll(center_id?: number) {
+  async findAll(params: {
+    center_id?: number;
+    page?: number;
+    limit?: number;
+    sort_by?: string;
+    sort_order?: 'asc' | 'desc';
+    first_name?: string;
+    last_name?: string;
+    gmail?: string;
+    phone_number?: string;
+    group_id?: number | 'notnull';
+  } = {}) {
+    const { center_id, page = 1, limit = 10, sort_by, sort_order, first_name, last_name, gmail, phone_number, group_id } = params;
+    const offset = (page - 1) * limit;
+
     const where: any = {};
     if (center_id) where.center_id = center_id;
-    const include = [
-      { model: GroupModel, as: 'mainGroups' },
-      { model: GroupModel, as: 'supportGroups' },
+    if (first_name) where.first_name = { [Op.iLike]: `%${first_name}%` };
+    if (last_name) where.last_name = { [Op.iLike]: `%${last_name}%` };
+    if (gmail) where.gmail = { [Op.iLike]: `%${gmail}%` };
+    if (phone_number) where.phone_number = { [Op.iLike]: `%${phone_number}%` };
+
+    // Sort
+    const order: any[] = [];
+    if (sort_by && ['id', 'first_name', 'last_name', 'gmail', 'phone_number', 'created_at'].includes(sort_by)) {
+      order.push([sort_by, sort_order === 'asc' ? 'ASC' : 'DESC']);
+    } else {
+      order.push(['id', 'DESC']);
+    }
+
+    const include: any[] = [
+      { model: GroupModel, as: 'mainGroups', required: false },
+      { model: GroupModel, as: 'supportGroups', required: false },
     ];
 
-    return await this.teacherModel.findAll({ where, include });
+    // group_id filter: 'notnull' = guruhi bor, 0 = guruhsiz
+    if (group_id === 'notnull') {
+      // Faqat kamida bitta guruhi bor teacherlar
+      const teacherIdsWithGroups = await this.teacherModel.findAll({
+        attributes: ['id'],
+        include: [
+          { model: GroupModel, as: 'mainGroups', attributes: [], required: true },
+          { model: GroupModel, as: 'supportGroups', attributes: [], required: true },
+        ],
+        where: center_id ? { center_id } : undefined,
+      });
+      const ids = [...new Set(teacherIdsWithGroups.map(t => t.id))];
+      if (ids.length === 0) {
+        return {
+          data: [],
+          pagination: { total: 0, page, limit, totalPages: 0 },
+        };
+      }
+      where.id = { [Op.in]: ids };
+    } else if (group_id === 0) {
+      // Faqat guruhi yo'q teacherlar
+      const teacherIdsWithGroups = await this.teacherModel.findAll({
+        attributes: ['id'],
+        include: [
+          { model: GroupModel, as: 'mainGroups', attributes: [], required: true },
+          { model: GroupModel, as: 'supportGroups', attributes: [], required: true },
+        ],
+        where: center_id ? { center_id } : undefined,
+      });
+      const idsWithGroups = [...new Set(teacherIdsWithGroups.map(t => t.id))];
+      if (idsWithGroups.length > 0) {
+        where.id = { [Op.notIn]: idsWithGroups };
+      }
+    }
+
+    const { count, rows } = await this.teacherModel.findAndCountAll({
+      where,
+      include,
+      order,
+      limit,
+      offset,
+      distinct: true,
+    });
+
+    return {
+      data: rows,
+      pagination: {
+        total: count,
+        page,
+        limit,
+        totalPages: Math.ceil(count / limit),
+      },
+    };
   }
 
   async findOne(id: number, includeGroups: boolean = false) {

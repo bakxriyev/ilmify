@@ -63,9 +63,31 @@ export class TeacherController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Barcha teacherlarni olish' })
-  async findAll(@Req() req?: any) {
-    return this.teacherService.findAll(req?.center_id);
+  @ApiOperation({ summary: 'Barcha teacherlarni olish (filter, pagination, sort)' })
+  async findAll(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('sort_by') sort_by?: string,
+    @Query('sort_order') sort_order?: string,
+    @Query('first_name') first_name?: string,
+    @Query('last_name') last_name?: string,
+    @Query('gmail') gmail?: string,
+    @Query('phone_number') phone_number?: string,
+    @Query('group_id') group_id?: string,
+    @Req() req?: any,
+  ) {
+    return this.teacherService.findAll({
+      center_id: req?.center_id,
+      page: page ? parseInt(page) : undefined,
+      limit: limit ? parseInt(limit) : undefined,
+      sort_by,
+      sort_order: sort_order as 'asc' | 'desc',
+      first_name,
+      last_name,
+      gmail,
+      phone_number,
+      group_id: group_id === 'notnull' ? 'notnull' : group_id ? parseInt(group_id) : undefined,
+    });
   }
 
   @Get(':id')

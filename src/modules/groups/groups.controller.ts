@@ -274,8 +274,9 @@ async create(@Body() createGroupDto: CreateGroupDto, @Req() req?: any) {
   async addStudent(
     @Param('id', ParseIntPipe) groupId: number,
     @Param('studentId', ParseIntPipe) studentId: number,
+    @Body('joined_date') joined_date?: string,
   ) {
-    return this.groupService.addStudentToGroup(groupId, studentId);
+    return this.groupService.addStudentToGroup(groupId, studentId, joined_date);
   }
 
   @Delete(':id/students/:studentId')

@@ -166,11 +166,13 @@ export class PaymentService {
         // Studentni alohida yuklaymiz
         const stu = await this.studentModel.findByPk(key, { attributes: ['id', 'first_name', 'last_name', 'phone_number'] });
         if (!stu) continue;
-        const grp = pJson.group_id ? await this.groupModel.findByPk(pJson.group_id, { attributes: ['id', 'name', 'monthly_price'] }) : null;
+        if (!pJson.group_id) continue; // Guruhi o'chirilgan to'lovlarni overview-da ko'rsatmaymiz
+        const grp = await this.groupModel.findByPk(pJson.group_id, { attributes: ['id', 'name', 'monthly_price'] });
+        if (!grp) continue;
         studentMap.set(key, {
           student: { id: key, first_name: stu.first_name, last_name: stu.last_name, phone_number: stu.phone_number },
-          group: grp ? { id: Number(grp.id), name: grp.name, monthly_price: Number(grp.monthly_price) || 0 } : { id: 0, name: 'Guruh o\'chirilgan', monthly_price: 0 },
-          month, year, relationGroupId: grp ? Number(grp.id) : 0,
+          group: { id: Number(grp.id), name: grp.name, monthly_price: Number(grp.monthly_price) || 0 },
+          month, year, relationGroupId: Number(grp.id),
         });
       }
     }
@@ -201,10 +203,7 @@ export class PaymentService {
       // Proratsiya: o'quvchi qo'shilgan sanadan boshlab qolgan darslar soniga qarab narxni hisoblash
       const relation = relations.find(r => Number(r.student_id) === entry.student.id && Number(r.group_id) === groupId);
       let effectivePrice = monthlyPrice;
-      if (groupId === 0) {
-        // Guruh o'chirilgan - payment summasini effective price qilib ishlatamiz
-        effectivePrice = totalPaidAmount > 0 ? totalPaidAmount : 0;
-      } else if (totalLessons > 0 && relation) {
+      if (totalLessons > 0 && relation) {
         const joinDate = new Date(relation.joined_date);
         if (joinDate > monthStart) {
           const remainingLessons = await this.groupLessonModel.count({
@@ -607,9 +606,10 @@ export class PaymentService {
     const now = new Date();
     const debts: any[] = [];
     const paidPayments: any[] = [];
+    const orphanedPayments: any[] = [];
     const processedMonths = new Set<string>();
 
-    // 1. BARCHA to'lovlarni olish (group_id bo'lsa ham, bo'lmasa ham)
+    // 1. BARCHA to'lovlarni olish
     const allPayments = await this.paymentModel.findAll({
       where: { student_id: studentId },
       include: [{ model: GroupModel, attributes: ['id', 'name', 'monthly_price'] }],
@@ -622,6 +622,7 @@ export class PaymentService {
     });
 
     // 3. HAR BIR GURUH UCHUN OYLARNI TAKRORLASH
+    //    (faqat group_id != null bo'lgan to'lovlar va guruhdagi studentlar)
     for (const groupStudent of groupStudents) {
       const group = (groupStudent as any).group;
       if (!group) continue;
@@ -631,7 +632,6 @@ export class PaymentService {
       const leftDate = groupStudent.left_date ? new Date(groupStudent.left_date) : null;
       const groupId = Number(group.id);
 
-      // Qo'shilgan oyni olish
       let currentDate = new Date(joinedDate.getFullYear(), joinedDate.getMonth(), 1);
       const currentNow = new Date(now.getFullYear(), now.getMonth(), 1);
 
@@ -654,7 +654,7 @@ export class PaymentService {
           where: { group_id: groupId, date: { [Op.gte]: monthStart, [Op.lt]: monthEnd } },
         });
 
-        // Student qo'shilganidan keyin nechta dars qolgan?
+        // Proratsiya: effectivePrice hisoblash
         let effectivePrice = monthlyPrice;
         let remainingLessons = totalLessons;
 
@@ -665,67 +665,63 @@ export class PaymentService {
             });
           }
           if (remainingLessons > 0) {
-            // Proratsiya: (oylik narx / umumiy darslar) * qolgan darslar
             effectivePrice = Math.round((monthlyPrice / totalLessons) * remainingLessons);
           } else {
             effectivePrice = 0;
           }
         }
 
-        // Shu oy uchun to'lov bormi? (group_id mos kelsa yoki null bo'lsa)
+        // Shu oy uchun to'lov bormi? (faqat group_id = groupId bo'lganlar)
         const payment = allPayments.find(p =>
           Number(p.month) === month &&
           Number(p.year) === year &&
-          (Number(p.group_id) === groupId || !p.group_id)
+          Number(p.group_id) === groupId
         );
 
         if (payment) {
-          if (payment.status === PaymentStatus.PAID) {
+          const paidAmount = Number(payment.amount);
+          if (paidAmount >= effectivePrice) {
+            // TO'LIQ TO'LANGAN
             paidPayments.push({
-              id: payment.id,
-              month, year,
-              group_id: groupId,
-              group_name: group.name,
-              amount: Number(payment.amount),
-              status: 'paid',
+              id: payment.id, month, year,
+              group_id: groupId, group_name: group.name,
+              amount: paidAmount, status: 'paid',
               paid_at: payment.paid_at,
             });
-          } else if (payment.status === PaymentStatus.UNPAID) {
-            debts.push({
-              id: payment.id,
-              month, year,
-              group_id: groupId,
-              group_name: group.name,
-              amount: effectivePrice,
-              payment_amount: Number(payment.amount),
-              status: 'unpaid',
-              created_at: payment.created_at,
+          } else if (paidAmount > 0) {
+            // QISMAN TO'LANGAN
+            paidPayments.push({
+              id: payment.id, month, year,
+              group_id: groupId, group_name: group.name,
+              amount: paidAmount, status: 'partial',
+              paid_at: payment.paid_at,
             });
-          } else if (payment.status === PaymentStatus.PARTIAL) {
             debts.push({
-              id: payment.id,
               month, year,
-              group_id: groupId,
-              group_name: group.name,
-              amount: Math.max(0, effectivePrice - Number(payment.amount)),
+              group_id: groupId, group_name: group.name,
+              amount: effectivePrice - paidAmount,
               full_amount: effectivePrice,
-              paid_amount: Number(payment.amount),
+              paid_amount: paidAmount,
               status: 'partial',
-              created_at: payment.created_at,
+            });
+          } else {
+            // 0 SOM TO'LANGAN
+            debts.push({
+              month, year,
+              group_id: groupId, group_name: group.name,
+              amount: effectivePrice,
+              status: 'unpaid',
             });
           }
         } else {
-          // To'lov yo'q - avtomatik qarzdorlik
+          // TO'LOV YO'Q → AVTOMATIK QARZDORLIK
           if (totalLessons > 0 && remainingLessons > 0 && monthStart <= now) {
             debts.push({
               month, year,
-              group_id: groupId,
-              group_name: group.name,
+              group_id: groupId, group_name: group.name,
               amount: effectivePrice,
               status: 'unpaid',
               is_auto_generated: true,
-              total_lessons: totalLessons,
-              remaining_lessons: remainingLessons,
             });
           }
         }
@@ -734,37 +730,22 @@ export class PaymentService {
       }
     }
 
-    // 4. ORPHANED TO'LOVLAR (group_id = null) - guruh o'chirilgan bo'lsa
+    // 4. ORPHANED TO'LOVLAR (group_id = null) → alohida field
     for (const payment of allPayments) {
       if (!payment.group_id) {
-        const key = `${payment.year}-${payment.month}`;
         const exists = [...debts, ...paidPayments].some(
           item => item.month === Number(payment.month) && item.year === Number(payment.year)
         );
         if (!exists) {
-          if (payment.status === PaymentStatus.PAID) {
-            paidPayments.push({
-              id: payment.id,
-              month: payment.month,
-              year: payment.year,
-              group_id: 0,
-              group_name: 'Guruh o\'chirilgan',
-              amount: Number(payment.amount),
-              status: 'paid',
-              paid_at: payment.paid_at,
-            });
-          } else {
-            debts.push({
-              id: payment.id,
-              month: payment.month,
-              year: payment.year,
-              group_id: 0,
-              group_name: 'Guruh o\'chirilgan',
-              amount: Number(payment.amount),
-              status: payment.status,
-              created_at: payment.created_at,
-            });
-          }
+          orphanedPayments.push({
+            id: payment.id,
+            month: payment.month, year: payment.year,
+            amount: Number(payment.amount),
+            status: payment.status,
+            paid_at: payment.paid_at,
+            created_at: payment.created_at,
+            note: payment.note,
+          });
         }
       }
     }
@@ -772,6 +753,7 @@ export class PaymentService {
     // 5. Sortirlash
     debts.sort((a, b) => (b.year - a.year) || (b.month - a.month));
     paidPayments.sort((a, b) => (b.year - a.year) || (b.month - a.month));
+    orphanedPayments.sort((a, b) => (b.year - a.year) || (b.month - a.month));
 
     const monthNames = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'];
 
@@ -784,6 +766,7 @@ export class PaymentService {
       },
       debts: debts.map(d => ({ ...d, month_name: monthNames[d.month - 1] })),
       paid_payments: paidPayments.map(p => ({ ...p, month_name: monthNames[p.month - 1] })),
+      orphaned_payments: orphanedPayments.map(p => ({ ...p, month_name: monthNames[p.month - 1] })),
       total_debt: debts.reduce((sum, d) => sum + (d.amount || 0), 0),
       paid_total: paidPayments.reduce((sum, p) => sum + (p.amount || 0), 0),
     };

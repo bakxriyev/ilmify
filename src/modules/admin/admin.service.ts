@@ -69,7 +69,7 @@ export class AdminService {
     });
   }
 
-  // Token generatsiya qilish
+  // Token generatsiya qilishddadsadasdsdasdas
   private generateTokens(admin: AdminModel, effectiveRole?: string) {
     const payload = { 
       sub: admin.id, 

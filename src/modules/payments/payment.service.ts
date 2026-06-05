@@ -602,17 +602,34 @@ export class PaymentService {
     });
     if (!student) throw new NotFoundException('Student topilmadi');
 
-    // Shu studentning barcha guruhlarini olish
+    const now = new Date();
+    const debts: any[] = [];
+    const paidPayments: any[] = [];
+
+    // **USUL 1:** Mavjud to'lovlarni barcha o'quvchining to'lovlariga qarab olish
+    const allPayments = await this.paymentModel.findAll({
+      where: { student_id: studentId },
+      include: [{ model: GroupModel, as: 'group', attributes: ['id', 'name', 'monthly_price'] }],
+      raw: false,
+    });
+
+    // **USUL 2:** Guruhga biriktirilgan oylarni hisoblash (avtomatik qarzdorlik uchun)
     const groupStudents = await this.groupStudentModel.findAll({
       where: { student_id: studentId },
       include: [{ model: GroupModel, as: 'group', attributes: ['id', 'name', 'monthly_price'] }],
     });
 
-    const now = new Date();
-    const debts: any[] = [];
-    const paidPayments: any[] = [];
+    // To'lovlarni month-year bo'yicha map qilish (duplikat oldini olish uchun)
+    const paymentMap = new Map<string, any>();
 
-    // Har bir guruh uchun shu oy va oldingi oylarni tekshirish
+    for (const payment of allPayments) {
+      const key = `${payment.year}-${payment.month}`;
+      if (!paymentMap.has(key)) {
+        paymentMap.set(key, payment);
+      }
+    }
+
+    // **ASOSIY LOGIKA:** Shu studentning guruhlari bo'yicha qarzdorlikni hisoblash
     for (const groupStudent of groupStudents) {
       const group = (groupStudent as any).group;
       if (!group) continue;
@@ -626,12 +643,10 @@ export class PaymentService {
       while (currentDate <= now && (!leftDate || currentDate <= leftDate)) {
         const month = currentDate.getMonth() + 1;
         const year = currentDate.getFullYear();
+        const key = `${year}-${month}`;
 
         // Ushbu oy uchun to'lov mavjudmi?
-        const payment = await this.paymentModel.findOne({
-          where: { student_id: studentId, group_id: group.id, month, year },
-          raw: true,
-        });
+        const payment = paymentMap.get(key);
 
         if (payment) {
           // To'lov mavjud - status tekshir
@@ -674,12 +689,11 @@ export class PaymentService {
           }
         } else {
           // To'lov yo'q - qarzdorlik mavjud
-          // Faqat mavjud oydan oldingi oylar uchun qarzdorlik hisoblanadi
+          // Oy boshlab ketgan bo'lsa qarzdorlik hisoblanadi (tugagani ham, tugamagan ham)
           const monthStart = new Date(year, month - 1, 1);
-          const monthEnd = new Date(year, month, 0, 23, 59, 59);
 
-          // Ushbu oyda o'quvchi guruhdagi bo'lganmi?
-          if (monthStart < now && monthEnd < now) {
+          // Ushbu oyda o'quvchi guruhdagi bo'lganmi va oy boshlanib ketganmi?
+          if (monthStart <= now) {
             debts.push({
               month,
               year,
@@ -694,6 +708,42 @@ export class PaymentService {
 
         // Keyingi oyga o't
         currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
+      }
+    }
+
+    // **MANUAL QO'SHILGAN TO'LOVLARNI QO'SHISH** (group_id bo'lmasa ham)
+    for (const payment of allPayments) {
+      if (!payment.group_id) {
+        // Ushbu to'lov biron guruhga biriktirilmagan (manual qo'shilgan)
+        const key = `${payment.year}-${payment.month}`;
+        const alreadyInDebts = debts.some(d => `${d.year}-${d.month}` === key);
+        const alreadyInPaid = paidPayments.some(p => `${p.year}-${p.month}` === key);
+
+        if (!alreadyInDebts && !alreadyInPaid) {
+          if (payment.status === PaymentStatus.PAID) {
+            paidPayments.push({
+              id: payment.id,
+              month: payment.month,
+              year: payment.year,
+              group_id: 0,
+              group_name: 'Manual to\'lov',
+              amount: payment.amount,
+              status: 'paid',
+              paid_at: payment.paid_at,
+            });
+          } else {
+            debts.push({
+              id: payment.id,
+              month: payment.month,
+              year: payment.year,
+              group_id: 0,
+              group_name: 'Manual to\'lov',
+              amount: payment.amount,
+              status: payment.status,
+              created_at: payment.created_at,
+            });
+          }
+        }
       }
     }
 

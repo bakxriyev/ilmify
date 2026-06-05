@@ -137,6 +137,12 @@ export class PaymentController {
     return this.service.sendAbsenceNotification(dto.student_id, dto.lesson_date);
   }
 
+  @Get('debts/:studentId')
+  @ApiOperation({ summary: "O'quvchining barcha qarzdorliklari" })
+  getStudentDebts(@Param('studentId') studentId: string) {
+    return this.service.getStudentDebts(Number(studentId));
+  }
+
   @Get('export')
   @ApiOperation({ summary: "To'lovlarni Excel format-da yuklab olish" })
   @ApiQuery({ name: 'month', required: true })

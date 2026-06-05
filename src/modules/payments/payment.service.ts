@@ -98,7 +98,6 @@ export class PaymentService {
     const monthStart = new Date(year, month - 1, 1);
     const monthEnd = new Date(year, month, 0, 23, 59, 59);
     const isCurrentMonth = month === now.getMonth() + 1 && year === now.getFullYear();
-    const overdueDays = Math.max(0, Math.floor((now.getTime() - monthStart.getTime()) / (1000 * 60 * 60 * 24)));
 
     // 1. Shu oyda guruhda bo'lgan studentlarni topish
     const relationWhere: any = {};
@@ -203,11 +202,7 @@ export class PaymentService {
       // Proratsiya: o'quvchi qo'shilgan sanadan boshlab qolgan darslar soniga qarab narxni hisoblash
       const relation = relations.find(r => Number(r.student_id) === entry.student.id && Number(r.group_id) === groupId);
       let effectivePrice = monthlyPrice;
-      if (isCurrentMonth) {
-        // Hozirgi oy: FULL PRICE (proratsiya yo'q)
-        // Chunki student hali barcha darslarga qatnashishi mumkin
-        effectivePrice = monthlyPrice;
-      } else if (totalLessons > 0 && relation) {
+      if (totalLessons > 0 && relation) {
         const joinDate = new Date(relation.joined_date);
         if (joinDate > monthStart) {
           const remainingLessons = await this.groupLessonModel.count({
@@ -242,7 +237,9 @@ export class PaymentService {
         effective_price: effectivePrice,
         paid_amount: totalPaidAmount,
         debt,
-        overdue_days: status === PaymentStatus.PAID ? 0 : overdueDays,
+        overdue_lessons: status === PaymentStatus.PAID ? 0 : await this.groupLessonModel.count({
+          where: { group_id: groupId, date: { [Op.lt]: now } },
+        }),
       });
     }
 

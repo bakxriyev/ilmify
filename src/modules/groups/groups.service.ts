@@ -8,6 +8,7 @@ import { StudentModel } from '../students/model/student.entity';
 import { CreateGroupDto, UpdateGroupDto } from './dto';
 import { QueryGroupDto } from './dto/query-group.dto';
 import { Op } from 'sequelize';
+import * as dayjs from 'dayjs';
 import { Sequelize } from 'sequelize-typescript';
 import { GroupLessonModel } from '../group-lesson/entities/group-lesson.entity'
 import { ChatRoomModel, ChatRoomType } from '../chat/entities/chat-room.entity';
@@ -414,9 +415,11 @@ async createLessons(
   const endDate = new Date(start);
   endDate.setMonth(endDate.getMonth() + durationMonths);
 
-  // parity "odd" -> Dushanba, Chorshanba, Juma (1,3,5)
-  // parity "even" -> Seshanba, Payshanba, Shanba (2,4,6)
-  // parity "both" -> Dushanba - Shanba (1-6)
+  // Kalendarda hafta Yakshanba bilan boshlanadi (1-kun)
+  // dayjs().day() : 0=Yak, 1=Dush, 2=Sesh, 3=Chor, 4=Pay, 5=Juma, 6=Shanba
+  //
+  // Toq kunlar -> Dushanba(1), Chorshanba(3), Juma(5)
+  // Juft kunlar -> Seshanba(2), Payshanba(4), Shanba(6)
   let selectedDays: number[];
   if (parity === 'odd') {
     selectedDays = [1, 3, 5];

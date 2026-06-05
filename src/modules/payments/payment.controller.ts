@@ -1,5 +1,6 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, Req } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, Req, Res } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { Response } from 'express';
 import { PaymentService } from './payment.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
@@ -134,5 +135,54 @@ export class PaymentController {
   @ApiOperation({ summary: 'Darsga kelmaganlik haqida bildirishnoma' })
   sendAbsenceNotification(@Body() dto: { student_id: number; lesson_date: string }) {
     return this.service.sendAbsenceNotification(dto.student_id, dto.lesson_date);
+  }
+
+  @Get('export')
+  @ApiOperation({ summary: "To'lovlarni Excel format-da yuklab olish" })
+  @ApiQuery({ name: 'month', required: true })
+  @ApiQuery({ name: 'year', required: true })
+  async export(
+    @Query('month') month: string,
+    @Query('year') year: string,
+    @Res() res: Response,
+    @Req() req?: any,
+  ) {
+    try {
+      const data = await this.service.exportToExcel(Number(month), Number(year), req?.center_id);
+      
+      // XLSX library yordamida Excel fayl yaratish
+      const XLSX = require('xlsx');
+      const worksheet = XLSX.utils.json_to_sheet(data);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'To\'lovlar');
+
+      // Column widths
+      const maxWidth = 20;
+      worksheet['!cols'] = [
+        { wch: 5 },   // No
+        { wch: 20 },  // Student Ismi
+        { wch: 15 },  // Telefon
+        { wch: 15 },  // Guruh
+        { wch: 12 },  // Oy
+        { wch: 8 },   // Yil
+        { wch: 12 },  // Oylik narx
+        { wch: 12 },  // Unumli narx
+        { wch: 12 },  // To'langan
+        { wch: 12 },  // Qarz
+        { wch: 15 },  // Status
+        { wch: 12 },  // Kechikgan kunlar
+        { wch: 20 },  // Izoh
+      ];
+
+      const monthNames = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'];
+      const fileName = `Tovlovlar_${monthNames[Number(month) - 1]}_${year}.xlsx`;
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+
+      XLSX.write(workbook, { type: 'stream', stream: res });
+    } catch (error) {
+      res.status(500).json({ message: 'Excel yaratishda xatolik', error: (error as any).message });
+    }
   }
 }

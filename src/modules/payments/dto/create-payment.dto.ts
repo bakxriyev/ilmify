@@ -21,4 +21,7 @@ export class CreatePaymentDto {
 
   @ApiProperty({ required: false, example: 'paid' })
   status?: 'paid' | 'unpaid' | 'partial';
+
+  @ApiProperty({ required: false, example: '2026-06-05' })
+  paid_at?: string;
 }

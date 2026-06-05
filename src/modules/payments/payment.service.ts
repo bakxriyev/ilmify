@@ -36,6 +36,12 @@ export class PaymentService {
     });
     if (existing) throw new BadRequestException('Bu oy uchun to\'lov allaqachon yaratilgan');
 
+    // Status "paid" bo'lsa, paid_at avtomatik shu kunning sanasiga tenglashadi
+    let paid_at = dto.paid_at || null;
+    if ((dto.status || PaymentStatus.PAID) === PaymentStatus.PAID && !paid_at) {
+      paid_at = new Date().toISOString().split('T')[0];
+    }
+
     const payment = await this.paymentModel.create({
       student_id: dto.student_id,
       group_id: dto.group_id,
@@ -43,7 +49,7 @@ export class PaymentService {
       month: dto.month,
       year: dto.year,
       status: dto.status || PaymentStatus.PAID,
-      paid_at: dto.status === PaymentStatus.PAID ? new Date().toISOString().split('T')[0] : null,
+      paid_at,
       note: dto.note || null,
       center_id: (dto as any).center_id || null,
     });
@@ -555,5 +561,30 @@ export class PaymentService {
       }
     }
     return { message: 'Bildirishnoma yuborildi' };
+  }
+
+  async exportToExcel(month: number, year: number, center_id?: number) {
+    const data = await this.getStudentsOverview(month, year, center_id);
+    
+    const monthNames = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'];
+    
+    // Prepare data for export
+    const exportData = data.map((item: any, index: number) => ({
+      'No': index + 1,
+      'Student Ismi': `${item.student.first_name} ${item.student.last_name}`,
+      'Telefon': item.student.phone_number || '-',
+      'Guruh': item.group?.name || '-',
+      'Oy': monthNames[month - 1],
+      'Yil': year,
+      'Oylik narx': item.monthly_price,
+      'Unumli narx': item.effective_price,
+      'To\'langan': item.paid_amount,
+      'Qarz': item.debt,
+      'Status': item.status === 'paid' ? 'To\'langan' : item.status === 'unpaid' ? 'To\'lanmagan' : 'Qisman',
+      'Kechikgan kunlar': item.overdue_days,
+      'Izoh': item.payment?.note || '-',
+    }));
+
+    return exportData;
   }
 }

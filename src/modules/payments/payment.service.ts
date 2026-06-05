@@ -166,12 +166,11 @@ export class PaymentService {
         // Studentni alohida yuklaymiz
         const stu = await this.studentModel.findByPk(key, { attributes: ['id', 'first_name', 'last_name', 'phone_number'] });
         if (!stu) continue;
-        const grp = await this.groupModel.findByPk(pJson.group_id, { attributes: ['id', 'name', 'monthly_price'] });
-        if (!grp) continue;
+        const grp = pJson.group_id ? await this.groupModel.findByPk(pJson.group_id, { attributes: ['id', 'name', 'monthly_price'] }) : null;
         studentMap.set(key, {
           student: { id: key, first_name: stu.first_name, last_name: stu.last_name, phone_number: stu.phone_number },
-          group: { id: Number(grp.id), name: grp.name, monthly_price: Number(grp.monthly_price) || 0 },
-          month, year, relationGroupId: Number(grp.id),
+          group: grp ? { id: Number(grp.id), name: grp.name, monthly_price: Number(grp.monthly_price) || 0 } : { id: 0, name: 'Guruh o\'chirilgan', monthly_price: 0 },
+          month, year, relationGroupId: grp ? Number(grp.id) : 0,
         });
       }
     }
@@ -202,7 +201,10 @@ export class PaymentService {
       // Proratsiya: o'quvchi qo'shilgan sanadan boshlab qolgan darslar soniga qarab narxni hisoblash
       const relation = relations.find(r => Number(r.student_id) === entry.student.id && Number(r.group_id) === groupId);
       let effectivePrice = monthlyPrice;
-      if (totalLessons > 0 && relation) {
+      if (groupId === 0) {
+        // Guruh o'chirilgan - payment summasini effective price qilib ishlatamiz
+        effectivePrice = totalPaidAmount > 0 ? totalPaidAmount : 0;
+      } else if (totalLessons > 0 && relation) {
         const joinDate = new Date(relation.joined_date);
         if (joinDate > monthStart) {
           const remainingLessons = await this.groupLessonModel.count({
@@ -605,31 +607,21 @@ export class PaymentService {
     const now = new Date();
     const debts: any[] = [];
     const paidPayments: any[] = [];
+    const processedMonths = new Set<string>();
 
-    // **USUL 1:** Mavjud to'lovlarni barcha o'quvchining to'lovlariga qarab olish
+    // 1. BARCHA to'lovlarni olish (group_id bo'lsa ham, bo'lmasa ham)
     const allPayments = await this.paymentModel.findAll({
       where: { student_id: studentId },
-      include: [{ model: GroupModel, as: 'group', attributes: ['id', 'name', 'monthly_price'] }],
-      raw: false,
+      include: [{ model: GroupModel, attributes: ['id', 'name', 'monthly_price'] }],
     });
 
-    // **USUL 2:** Guruhga biriktirilgan oylarni hisoblash (avtomatik qarzdorlik uchun)
+    // 2. Guruhga biriktirilganlik ma'lumotlari
     const groupStudents = await this.groupStudentModel.findAll({
       where: { student_id: studentId },
       include: [{ model: GroupModel, as: 'group', attributes: ['id', 'name', 'monthly_price'] }],
     });
 
-    // To'lovlarni month-year bo'yicha map qilish (duplikat oldini olish uchun)
-    const paymentMap = new Map<string, any>();
-
-    for (const payment of allPayments) {
-      const key = `${payment.year}-${payment.month}`;
-      if (!paymentMap.has(key)) {
-        paymentMap.set(key, payment);
-      }
-    }
-
-    // **ASOSIY LOGIKA:** Shu studentning guruhlari bo'yicha qarzdorlikni hisoblash
+    // 3. HAR BIR GURUH UCHUN OYLARNI TAKRORLASH
     for (const groupStudent of groupStudents) {
       const group = (groupStudent as any).group;
       if (!group) continue;
@@ -637,97 +629,127 @@ export class PaymentService {
       const monthlyPrice = Number(group.monthly_price) || 0;
       const joinedDate = new Date(groupStudent.joined_date);
       const leftDate = groupStudent.left_date ? new Date(groupStudent.left_date) : null;
+      const groupId = Number(group.id);
 
-      // Qo'shilgan oydan bugungi oyigacha barcha oylarni ko'rib chiqish
-      let currentDate = new Date(joinedDate);
-      while (currentDate <= now && (!leftDate || currentDate <= leftDate)) {
+      // Qo'shilgan oyni olish
+      let currentDate = new Date(joinedDate.getFullYear(), joinedDate.getMonth(), 1);
+      const currentNow = new Date(now.getFullYear(), now.getMonth(), 1);
+
+      while (currentDate <= currentNow && (!leftDate || currentDate <= new Date(leftDate.getFullYear(), leftDate.getMonth(), 1))) {
         const month = currentDate.getMonth() + 1;
         const year = currentDate.getFullYear();
-        const key = `${year}-${month}`;
+        const monthKey = `${year}-${month}`;
 
-        // Ushbu oy uchun to'lov mavjudmi?
-        const payment = paymentMap.get(key);
+        if (processedMonths.has(monthKey)) {
+          currentDate = new Date(year, month, 1);
+          continue;
+        }
+        processedMonths.add(monthKey);
+
+        const monthStart = new Date(year, month - 1, 1);
+        const monthEnd = new Date(year, month, 0, 23, 59, 59);
+
+        // Guruhdagi shu oyda nechta dars bor?
+        const totalLessons = await this.groupLessonModel.count({
+          where: { group_id: groupId, date: { [Op.gte]: monthStart, [Op.lt]: monthEnd } },
+        });
+
+        // Student qo'shilganidan keyin nechta dars qolgan?
+        let effectivePrice = monthlyPrice;
+        let remainingLessons = totalLessons;
+
+        if (totalLessons > 0) {
+          if (joinedDate > monthStart) {
+            remainingLessons = await this.groupLessonModel.count({
+              where: { group_id: groupId, date: { [Op.gte]: joinedDate, [Op.lt]: monthEnd } },
+            });
+          }
+          if (remainingLessons > 0) {
+            // Proratsiya: (oylik narx / umumiy darslar) * qolgan darslar
+            effectivePrice = Math.round((monthlyPrice / totalLessons) * remainingLessons);
+          } else {
+            effectivePrice = 0;
+          }
+        }
+
+        // Shu oy uchun to'lov bormi? (group_id mos kelsa yoki null bo'lsa)
+        const payment = allPayments.find(p =>
+          Number(p.month) === month &&
+          Number(p.year) === year &&
+          (Number(p.group_id) === groupId || !p.group_id)
+        );
 
         if (payment) {
-          // To'lov mavjud - status tekshir
           if (payment.status === PaymentStatus.PAID) {
             paidPayments.push({
               id: payment.id,
-              month,
-              year,
-              group_id: group.id,
+              month, year,
+              group_id: groupId,
               group_name: group.name,
-              amount: payment.amount,
+              amount: Number(payment.amount),
               status: 'paid',
               paid_at: payment.paid_at,
             });
           } else if (payment.status === PaymentStatus.UNPAID) {
             debts.push({
               id: payment.id,
-              month,
-              year,
-              group_id: group.id,
+              month, year,
+              group_id: groupId,
               group_name: group.name,
-              amount: payment.amount,
+              amount: effectivePrice,
+              payment_amount: Number(payment.amount),
               status: 'unpaid',
               created_at: payment.created_at,
             });
           } else if (payment.status === PaymentStatus.PARTIAL) {
-            const remaining = payment.amount - (payment.paid_at ? payment.amount : 0);
             debts.push({
               id: payment.id,
-              month,
-              year,
-              group_id: group.id,
+              month, year,
+              group_id: groupId,
               group_name: group.name,
-              amount: remaining,
-              full_amount: payment.amount,
-              paid_amount: payment.paid_at ? payment.amount : 0,
+              amount: Math.max(0, effectivePrice - Number(payment.amount)),
+              full_amount: effectivePrice,
+              paid_amount: Number(payment.amount),
               status: 'partial',
               created_at: payment.created_at,
             });
           }
         } else {
-          // To'lov yo'q - qarzdorlik mavjud
-          // Oy boshlab ketgan bo'lsa qarzdorlik hisoblanadi (tugagani ham, tugamagan ham)
-          const monthStart = new Date(year, month - 1, 1);
-
-          // Ushbu oyda o'quvchi guruhdagi bo'lganmi va oy boshlanib ketganmi?
-          if (monthStart <= now) {
+          // To'lov yo'q - avtomatik qarzdorlik
+          if (totalLessons > 0 && remainingLessons > 0 && monthStart <= now) {
             debts.push({
-              month,
-              year,
-              group_id: group.id,
+              month, year,
+              group_id: groupId,
               group_name: group.name,
-              amount: monthlyPrice,
+              amount: effectivePrice,
               status: 'unpaid',
               is_auto_generated: true,
+              total_lessons: totalLessons,
+              remaining_lessons: remainingLessons,
             });
           }
         }
 
-        // Keyingi oyga o't
-        currentDate = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1);
+        currentDate = new Date(year, month, 1);
       }
     }
 
-    // **MANUAL QO'SHILGAN TO'LOVLARNI QO'SHISH** (group_id bo'lmasa ham)
+    // 4. ORPHANED TO'LOVLAR (group_id = null) - guruh o'chirilgan bo'lsa
     for (const payment of allPayments) {
       if (!payment.group_id) {
-        // Ushbu to'lov biron guruhga biriktirilmagan (manual qo'shilgan)
         const key = `${payment.year}-${payment.month}`;
-        const alreadyInDebts = debts.some(d => `${d.year}-${d.month}` === key);
-        const alreadyInPaid = paidPayments.some(p => `${p.year}-${p.month}` === key);
-
-        if (!alreadyInDebts && !alreadyInPaid) {
+        const exists = [...debts, ...paidPayments].some(
+          item => item.month === Number(payment.month) && item.year === Number(payment.year)
+        );
+        if (!exists) {
           if (payment.status === PaymentStatus.PAID) {
             paidPayments.push({
               id: payment.id,
               month: payment.month,
               year: payment.year,
               group_id: 0,
-              group_name: 'Manual to\'lov',
-              amount: payment.amount,
+              group_name: 'Guruh o\'chirilgan',
+              amount: Number(payment.amount),
               status: 'paid',
               paid_at: payment.paid_at,
             });
@@ -737,8 +759,8 @@ export class PaymentService {
               month: payment.month,
               year: payment.year,
               group_id: 0,
-              group_name: 'Manual to\'lov',
-              amount: payment.amount,
+              group_name: 'Guruh o\'chirilgan',
+              amount: Number(payment.amount),
               status: payment.status,
               created_at: payment.created_at,
             });
@@ -747,16 +769,9 @@ export class PaymentService {
       }
     }
 
-    // Oylar bo'yicha sortirlash (yangilar birinchi)
-    debts.sort((a, b) => {
-      if (b.year !== a.year) return b.year - a.year;
-      return b.month - a.month;
-    });
-
-    paidPayments.sort((a, b) => {
-      if (b.year !== a.year) return b.year - a.year;
-      return b.month - a.month;
-    });
+    // 5. Sortirlash
+    debts.sort((a, b) => (b.year - a.year) || (b.month - a.month));
+    paidPayments.sort((a, b) => (b.year - a.year) || (b.month - a.month));
 
     const monthNames = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'];
 
@@ -767,14 +782,8 @@ export class PaymentService {
         last_name: student.last_name,
         phone_number: student.phone_number,
       },
-      debts: debts.map(d => ({
-        ...d,
-        month_name: monthNames[d.month - 1],
-      })),
-      paid_payments: paidPayments.map(p => ({
-        ...p,
-        month_name: monthNames[p.month - 1],
-      })),
+      debts: debts.map(d => ({ ...d, month_name: monthNames[d.month - 1] })),
+      paid_payments: paidPayments.map(p => ({ ...p, month_name: monthNames[p.month - 1] })),
       total_debt: debts.reduce((sum, d) => sum + (d.amount || 0), 0),
       paid_total: paidPayments.reduce((sum, p) => sum + (p.amount || 0), 0),
     };

@@ -179,4 +179,14 @@ export class GroupLessonService {
     await lesson.destroy();
     return { message: 'Lesson o\'chirildi' };
   }
+
+  async removeAllByGroup(groupId: number) {
+    const group = await this.groupModel.findByPk(groupId);
+    if (!group) throw new NotFoundException('Group topilmadi');
+
+    const deleted = await this.lessonModel.destroy({
+      where: { group_id: groupId },
+    });
+    return { message: `${deleted} ta dars o'chirildi`, deleted_count: deleted };
+  }
 }

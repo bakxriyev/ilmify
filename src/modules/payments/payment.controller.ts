@@ -184,9 +184,10 @@ export class PaymentController {
       const fileName = `Tovlovlar_${monthNames[Number(month) - 1]}_${year}.xlsx`;
 
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
 
-      XLSX.write(workbook, { type: 'stream', stream: res });
+      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+      res.send(buffer);
     } catch (error) {
       res.status(500).json({ message: 'Excel yaratishda xatolik', error: (error as any).message });
     }

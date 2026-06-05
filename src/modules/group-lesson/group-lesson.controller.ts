@@ -100,4 +100,12 @@ export class GroupLessonController {
   ) {
     return this.lessonService.removeLesson(lessonId);
   }
+
+  @Delete('group/:groupId')
+  @ApiOperation({ summary: 'Guruhdagi barcha darslarni o\'chirish' })
+  async deleteAllGroupLessons(
+    @Param('groupId', ParseIntPipe) groupId: number,
+  ) {
+    return this.lessonService.removeAllByGroup(groupId);
+  }
 }

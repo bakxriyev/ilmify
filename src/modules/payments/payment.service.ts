@@ -203,7 +203,11 @@ export class PaymentService {
       // Proratsiya: o'quvchi qo'shilgan sanadan boshlab qolgan darslar soniga qarab narxni hisoblash
       const relation = relations.find(r => Number(r.student_id) === entry.student.id && Number(r.group_id) === groupId);
       let effectivePrice = monthlyPrice;
-      if (totalLessons > 0 && relation) {
+      if (isCurrentMonth) {
+        // Hozirgi oy: FULL PRICE (proratsiya yo'q)
+        // Chunki student hali barcha darslarga qatnashishi mumkin
+        effectivePrice = monthlyPrice;
+      } else if (totalLessons > 0 && relation) {
         const joinDate = new Date(relation.joined_date);
         if (joinDate > monthStart) {
           const remainingLessons = await this.groupLessonModel.count({
@@ -648,81 +652,124 @@ export class PaymentService {
 
         const monthStart = new Date(year, month - 1, 1);
         const monthEnd = new Date(year, month, 0, 23, 59, 59);
+        const isCurrentMonth = month === now.getMonth() + 1 && year === now.getFullYear();
 
-        // Guruhdagi shu oyda nechta dars bor?
-        const totalLessons = await this.groupLessonModel.count({
-          where: { group_id: groupId, date: { [Op.gte]: monthStart, [Op.lt]: monthEnd } },
-        });
-
-        // Proratsiya: effectivePrice hisoblash
-        let effectivePrice = monthlyPrice;
-        let remainingLessons = totalLessons;
-
-        if (totalLessons > 0) {
-          if (joinedDate > monthStart) {
-            remainingLessons = await this.groupLessonModel.count({
-              where: { group_id: groupId, date: { [Op.gte]: joinedDate, [Op.lt]: monthEnd } },
-            });
-          }
-          if (remainingLessons > 0) {
-            effectivePrice = Math.round((monthlyPrice / totalLessons) * remainingLessons);
+        if (isCurrentMonth) {
+          // HOZIRGI OY: FULL PRICE (proratsiya YO'Q)
+          // Chunki student hali barcha darslarga qatnashishi mumkin
+          const payment = allPayments.find(p =>
+            Number(p.month) === month &&
+            Number(p.year) === year &&
+            Number(p.group_id) === groupId
+          );
+          if (payment) {
+            const paidAmount = Number(payment.amount);
+            if (paidAmount >= monthlyPrice) {
+              paidPayments.push({
+                id: payment.id, month, year,
+                group_id: groupId, group_name: group.name,
+                amount: paidAmount, status: 'paid',
+                paid_at: payment.paid_at,
+              });
+            } else if (paidAmount > 0) {
+              paidPayments.push({
+                id: payment.id, month, year,
+                group_id: groupId, group_name: group.name,
+                amount: paidAmount, status: 'partial',
+                paid_at: payment.paid_at,
+              });
+              debts.push({
+                month, year,
+                group_id: groupId, group_name: group.name,
+                amount: monthlyPrice - paidAmount,
+                full_amount: monthlyPrice, paid_amount: paidAmount,
+                status: 'partial',
+              });
+            } else {
+              debts.push({
+                month, year,
+                group_id: groupId, group_name: group.name,
+                amount: monthlyPrice, status: 'unpaid',
+              });
+            }
           } else {
-            effectivePrice = 0;
-          }
-        }
-
-        // Shu oy uchun to'lov bormi? (faqat group_id = groupId bo'lganlar)
-        const payment = allPayments.find(p =>
-          Number(p.month) === month &&
-          Number(p.year) === year &&
-          Number(p.group_id) === groupId
-        );
-
-        if (payment) {
-          const paidAmount = Number(payment.amount);
-          if (paidAmount >= effectivePrice) {
-            // TO'LIQ TO'LANGAN
-            paidPayments.push({
-              id: payment.id, month, year,
-              group_id: groupId, group_name: group.name,
-              amount: paidAmount, status: 'paid',
-              paid_at: payment.paid_at,
-            });
-          } else if (paidAmount > 0) {
-            // QISMAN TO'LANGAN
-            paidPayments.push({
-              id: payment.id, month, year,
-              group_id: groupId, group_name: group.name,
-              amount: paidAmount, status: 'partial',
-              paid_at: payment.paid_at,
-            });
+            // Hozirgi oy uchun to'lov yo'q → FULL PRICE bilan qarzdorlik
             debts.push({
               month, year,
               group_id: groupId, group_name: group.name,
-              amount: effectivePrice - paidAmount,
-              full_amount: effectivePrice,
-              paid_amount: paidAmount,
-              status: 'partial',
-            });
-          } else {
-            // 0 SOM TO'LANGAN
-            debts.push({
-              month, year,
-              group_id: groupId, group_name: group.name,
-              amount: effectivePrice,
-              status: 'unpaid',
-            });
-          }
-        } else {
-          // TO'LOV YO'Q → AVTOMATIK QARZDORLIK
-          if (totalLessons > 0 && remainingLessons > 0 && monthStart <= now) {
-            debts.push({
-              month, year,
-              group_id: groupId, group_name: group.name,
-              amount: effectivePrice,
+              amount: monthlyPrice,
               status: 'unpaid',
               is_auto_generated: true,
             });
+          }
+        } else {
+          // O'TGAN OYLAR: Proratsiya bo'yicha hisoblash
+          const totalLessons = await this.groupLessonModel.count({
+            where: { group_id: groupId, date: { [Op.gte]: monthStart, [Op.lt]: monthEnd } },
+          });
+
+          let effectivePrice = monthlyPrice;
+          let remainingLessons = totalLessons;
+
+          if (totalLessons > 0) {
+            if (joinedDate > monthStart) {
+              remainingLessons = await this.groupLessonModel.count({
+                where: { group_id: groupId, date: { [Op.gte]: joinedDate, [Op.lt]: monthEnd } },
+              });
+            }
+            if (remainingLessons > 0) {
+              effectivePrice = Math.round((monthlyPrice / totalLessons) * remainingLessons);
+            } else {
+              effectivePrice = 0;
+            }
+          }
+
+          const payment = allPayments.find(p =>
+            Number(p.month) === month &&
+            Number(p.year) === year &&
+            Number(p.group_id) === groupId
+          );
+
+          if (payment) {
+            const paidAmount = Number(payment.amount);
+            if (paidAmount >= effectivePrice) {
+              paidPayments.push({
+                id: payment.id, month, year,
+                group_id: groupId, group_name: group.name,
+                amount: paidAmount, status: 'paid',
+                paid_at: payment.paid_at,
+              });
+            } else if (paidAmount > 0) {
+              paidPayments.push({
+                id: payment.id, month, year,
+                group_id: groupId, group_name: group.name,
+                amount: paidAmount, status: 'partial',
+                paid_at: payment.paid_at,
+              });
+              debts.push({
+                month, year,
+                group_id: groupId, group_name: group.name,
+                amount: effectivePrice - paidAmount,
+                full_amount: effectivePrice, paid_amount: paidAmount,
+                status: 'partial',
+              });
+            } else {
+              debts.push({
+                month, year,
+                group_id: groupId, group_name: group.name,
+                amount: effectivePrice, status: 'unpaid',
+              });
+            }
+          } else {
+            if (totalLessons > 0 && remainingLessons > 0 && monthStart <= now) {
+              debts.push({
+                month, year,
+                group_id: groupId, group_name: group.name,
+                amount: effectivePrice,
+                status: 'unpaid',
+                is_auto_generated: true,
+              });
+            }
           }
         }
 

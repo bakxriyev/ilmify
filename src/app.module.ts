@@ -82,6 +82,8 @@ import { SmsLogModel } from './modules/sms/entities/sms-log.entity';
 import { SmsTemplateModel } from './modules/sms/entities/sms-template.entity';
 import { CenterApplicationsModule } from './modules/center-applications/center-applications.module';
 import { CenterApplicationModel } from './modules/center-applications/entities/center-application.entity';
+import { AuditModule } from './modules/audit/audit.module';
+import { AuditLogModel } from './modules/audit/entities/audit-log.entity';
 
 @Module({
   imports: [
@@ -107,7 +109,7 @@ import { CenterApplicationModel } from './modules/center-applications/entities/c
             username: config.get<string>('databaseConfig.user'),
             password: config.get<string>('databaseConfig.password'),
             database: config.get<string>('databaseConfig.dbname'),
-            models: [TariffModel, TeacherModel,LevelModel,AdminModel,UserDeviceModel,GroupLessonModel,RedoIncorrectTaskModel, StudentModel,GroupModel,GroupStudentModel,AttendanceModel,UnitModel,ExerciseModel,TaskModel,StudentAnswerModel,ExerciseResultModel,VocabModel,VocabAnswerModel,VocabResultModel,UnitResultModel,StudentCoinsModel,TeacherCoinLogModel,TaskCoinLogModel,ChatRoomModel,ChatMessageModel,MessageStatusModel,ParentModel,ParentStudentModel,RoomModel,PaymentModel,EducationCenterModel,CenterBranchModel,LeadModel,LeadSourceModel,TelegramSettingsModel,TelegramBotModel,TelegramChatModel,TelegramMessageModel,TelegramTemplateModel,TelegramBroadcastModel,AutoNotificationConfigModel,AutoNotificationLogModel,SmsLogModel,SmsTemplateModel,CenterApplicationModel],
+            models: [TariffModel, TeacherModel,LevelModel,AdminModel,UserDeviceModel,GroupLessonModel,RedoIncorrectTaskModel, StudentModel,GroupModel,GroupStudentModel,AttendanceModel,UnitModel,ExerciseModel,TaskModel,StudentAnswerModel,ExerciseResultModel,VocabModel,VocabAnswerModel,VocabResultModel,UnitResultModel,StudentCoinsModel,TeacherCoinLogModel,TaskCoinLogModel,ChatRoomModel,ChatMessageModel,MessageStatusModel,ParentModel,ParentStudentModel,RoomModel,PaymentModel,EducationCenterModel,CenterBranchModel,LeadModel,LeadSourceModel,TelegramSettingsModel,TelegramBotModel,TelegramChatModel,TelegramMessageModel,TelegramTemplateModel,TelegramBroadcastModel,AutoNotificationConfigModel,AutoNotificationLogModel,SmsLogModel,SmsTemplateModel,CenterApplicationModel,AuditLogModel],
             sync: { alter: true },
             synchronize: true,
             logging: console.log,
@@ -162,6 +164,7 @@ import { CenterApplicationModel } from './modules/center-applications/entities/c
     AutoNotificationModule,
     SmsModule,
     CenterApplicationsModule,
+    AuditModule,
   ],
   controllers: [
   ],

@@ -1,12 +1,16 @@
-import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Logger } from '@nestjs/common';
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Logger, Inject } from '@nestjs/common';
 import { Observable, tap } from 'rxjs';
 import { AuditService } from './audit.service';
+import { NotificationGateway } from '../notification/notification.gateway';
 
 @Injectable()
 export class AuditInterceptor implements NestInterceptor {
   private readonly logger = new Logger(AuditInterceptor.name);
 
-  constructor(private readonly auditService: AuditService) {}
+  constructor(
+    private readonly auditService: AuditService,
+    @Inject(NotificationGateway) private readonly notificationGateway: NotificationGateway,
+  ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const request = context.switchToHttp().getRequest();
@@ -25,7 +29,7 @@ export class AuditInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       tap({
-        next: (responseBody: any) => {
+        next: async (responseBody: any) => {
           try {
             const duration = Date.now() - now;
             const adminId = user?.id || user?.adminId || 0;
@@ -35,7 +39,7 @@ export class AuditInterceptor implements NestInterceptor {
             const parsed = this.parseRequest(method, originalUrl, body, responseBody);
 
             if (parsed) {
-              this.auditService.log({
+              const logEntry = await this.auditService.log({
                 admin_id: adminId,
                 admin_name: adminName,
                 center_id: centerId,
@@ -44,9 +48,16 @@ export class AuditInterceptor implements NestInterceptor {
                   duration: `${duration}ms`,
                   requestBody: this.sanitizeBody(body),
                 },
-              }).catch(err => {
-                this.logger.error('Failed to save audit log', err);
               });
+
+              // Real-time audit event ni WebSocket orqali yuborish
+              if (logEntry && centerId) {
+                try {
+                  this.notificationGateway.emitToCenter('audit', centerId, logEntry.toJSON());
+                } catch (wsErr) {
+                  this.logger.error('Failed to emit audit via WebSocket', wsErr);
+                }
+              }
             }
           } catch (err) {
             this.logger.error('Audit interceptor error', err);

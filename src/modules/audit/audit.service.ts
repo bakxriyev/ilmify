@@ -23,7 +23,7 @@ export class AuditService {
     center_id?: number;
   }) {
     try {
-      await this.auditLogModel.create({
+      return await this.auditLogModel.create({
         admin_id: params.admin_id,
         admin_name: params.admin_name,
         action: params.action,
@@ -36,6 +36,7 @@ export class AuditService {
       });
     } catch (err) {
       console.error('Audit log error:', err);
+      return null;
     }
   }
 

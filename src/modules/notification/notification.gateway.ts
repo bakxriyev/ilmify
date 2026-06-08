@@ -56,4 +56,12 @@ export class NotificationGateway implements OnGatewayConnection, OnGatewayDiscon
   sendToAll(data: any) {
     this.server.emit('notification', data);
   }
+
+  emitToCenter(event: string, centerId: number, data: any) {
+    this.server.to(`center-${centerId}`).emit(event, data);
+  }
+
+  emitToAll(event: string, data: any) {
+    this.server.emit(event, data);
+  }
 }

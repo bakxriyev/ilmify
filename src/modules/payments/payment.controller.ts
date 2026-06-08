@@ -154,37 +154,172 @@ export class PaymentController {
     @Req() req?: any,
   ) {
     try {
-      const data = await this.service.exportToExcel(Number(month), Number(year), req?.center_id);
-      
-      // XLSX library yordamida Excel fayl yaratish
-      const XLSX = require('xlsx');
-      const worksheet = XLSX.utils.json_to_sheet(data);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, 'To\'lovlar');
+      const result = await this.service.exportToExcel(Number(month), Number(year), req?.center_id);
+      const { exportData, summary } = result;
+      const monthNames = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'];
 
-      // Column widths
-      const maxWidth = 20;
-      worksheet['!cols'] = [
-        { wch: 5 },   // No
-        { wch: 20 },  // Student Ismi
-        { wch: 15 },  // Telefon
-        { wch: 15 },  // Guruh
-        { wch: 12 },  // Oy
-        { wch: 8 },   // Yil
-        { wch: 12 },  // Oylik narx
-        { wch: 12 },  // Unumli narx
-        { wch: 12 },  // To'langan
-        { wch: 12 },  // Qarz
-        { wch: 15 },  // Status
-        { wch: 12 },  // Kechikgan kunlar
-        { wch: 20 },  // Izoh
+      const XLSX = require('xlsx');
+
+      // --- Build raw data array with title and summary ---
+      const rows: any[][] = [];
+
+      // Row 1: Title
+      rows.push([`To'lov hisoboti | ${monthNames[Number(month) - 1]} ${year}`]);
+
+      // Row 2: Empty
+      rows.push([]);
+
+      // Row 3: Headers
+      const headers = ['No', 'Student Ismi', 'Telefon', 'Guruh', 'Oy', 'Yil', 'Oylik narx', 'Unumli narx', "To'langan", 'Qarz', 'Status', "Kechikkan darslar", 'Izoh'];
+      rows.push(headers);
+
+      // Data rows
+      for (const item of exportData) {
+        rows.push([
+          item['No'],
+          item['Student Ismi'],
+          item['Telefon'],
+          item['Guruh'],
+          item['Oy'],
+          item['Yil'],
+          Number(item['Oylik narx']),
+          Number(item['Unumli narx']),
+          Number(item["To'langan"]),
+          Number(item['Qarz']),
+          item['Status'],
+          Number(item['Kechikkan darslar']),
+          item['Izoh'],
+        ]);
+      }
+
+      // Empty row before summary
+      rows.push([]);
+
+      // Summary section
+      rows.push(['', 'UMUMIY HISOBOT', '', '', '', '', '', '', '', '', '', '', '']);
+      rows.push(['Jami studentlar', summary.totalStudents, '', '', "To'langan", summary.totalPaid, "To'lanmagan", summary.totalUnpaid, 'Qisman', summary.totalPartial, '', '', '']);
+      rows.push([`Oy: ${monthNames[Number(month) - 1]} ${year}`, '', '', '', '', '', '', '', '', '', '', '', '']);
+      rows.push(['Oylik narx (jami)', summary.sumOylik, '', "Unumli narx (jami)", summary.sumEffective, '', "To'langan (jami)", summary.sumPaid, '', 'Qarz (jami)', summary.sumDebt, '', '']);
+
+      // Create worksheet
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+
+      // Merge title row
+      ws['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 12 } },  // Title
+        { s: { r: rows.length - 4, c: 0 }, e: { r: rows.length - 4, c: 12 } },  // Summary header
       ];
 
-      const monthNames = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'];
-      const fileName = `Tovlovlar_${monthNames[Number(month) - 1]}_${year}.xlsx`;
+      // Column widths
+      ws['!cols'] = [
+        { wch: 5 },   // No
+        { wch: 22 },  // Student Ismi
+        { wch: 17 },  // Telefon
+        { wch: 18 },  // Guruh
+        { wch: 12 },  // Oy
+        { wch: 6 },   // Yil
+        { wch: 14 },  // Oylik narx
+        { wch: 14 },  // Unumli narx
+        { wch: 14 },  // To'langan
+        { wch: 14 },  // Qarz
+        { wch: 14 },  // Status
+        { wch: 14 },  // Kechikkan darslar
+        { wch: 22 },  // Izoh
+      ];
+
+      // Style rows: bold for title, headers, and summary
+      const boldStyle = { font: { bold: true, sz: 12 } };
+      const titleStyle = { font: { bold: true, sz: 14, color: { rgb: '1F4E79' } } };
+      const headerStyle = { font: { bold: true, sz: 11, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '4472C4' } } };
+      const summaryStyle = { font: { bold: true, sz: 11, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: '2E75B6' } } };
+
+      // Title row
+      if (ws['A1']) ws['A1'].s = titleStyle;
+
+      // Header row
+      const headerRowNum = 2;
+      for (let c = 0; c < headers.length; c++) {
+        const cellRef = XLSX.utils.encode_cell({ r: headerRowNum, c });
+        if (ws[cellRef]) ws[cellRef].s = headerStyle;
+      }
+
+      // Summary header row
+      const summaryRow = rows.length - 4;
+      for (let c = 0; c < 13; c++) {
+        const cellRef = XLSX.utils.encode_cell({ r: summaryRow, c });
+        if (ws[cellRef]) ws[cellRef].s = summaryStyle;
+      }
+
+      // Bold for summary data labels
+      for (let r = rows.length - 3; r < rows.length; r++) {
+        for (let c = 0; c < 13; c++) {
+          const cellRef = XLSX.utils.encode_cell({ r, c });
+          if (ws[cellRef] && ws[cellRef].v) {
+            ws[cellRef].s = { ...ws[cellRef].s, font: { bold: true, sz: 11 } };
+          }
+        }
+      }
+
+      // Alignment
+      for (let r = 0; r < rows.length; r++) {
+        for (let c = 0; c < 13; c++) {
+          const cellRef = XLSX.utils.encode_cell({ r, c });
+          if (ws[cellRef]) {
+            ws[cellRef].s = {
+              ...(ws[cellRef].s || {}),
+              alignment: { vertical: 'center', horizontal: c === 0 || c >= 6 ? 'center' : 'left' },
+            };
+          }
+        }
+      }
+
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, ws, `${monthNames[Number(month) - 1]} ${year}`);
+
+      // --- Year summary sheet (all months) ---
+      const yearData = await this.service.getYearOverview(Number(year), req?.center_id);
+      if (yearData && yearData.length > 0) {
+        const yearRows: any[][] = [];
+        yearRows.push([`${year} yil to'lov xulosasi`]);
+        yearRows.push([]);
+        yearRows.push(['Oy', 'Jami studentlar', "To'langan", "To'lanmagan", 'Qisman', "To'lov foizi"]);
+
+        for (const m of yearData) {
+          const pct = m.total > 0 ? Math.round((m.paid / m.total) * 100) : 0;
+          yearRows.push([monthNames[m.month - 1], m.total, m.paid, m.unpaid, m.partial, `${pct}%`]);
+        }
+
+        const totalStudentsY = yearData.reduce((s: number, m: any) => s + m.total, 0);
+        const totalPaidY = yearData.reduce((s: number, m: any) => s + m.paid, 0);
+        const totalUnpaidY = yearData.reduce((s: number, m: any) => s + m.unpaid, 0);
+        const totalPartialY = yearData.reduce((s: number, m: any) => s + m.partial, 0);
+        yearRows.push([]);
+        yearRows.push(['JAMI', totalStudentsY, totalPaidY, totalUnpaidY, totalPartialY, totalStudentsY > 0 ? `${Math.round((totalPaidY / totalStudentsY) * 100)}%` : '0%']);
+
+        const yearWs = XLSX.utils.aoa_to_sheet(yearRows);
+        yearWs['!cols'] = [{ wch: 12 }, { wch: 16 }, { wch: 12 }, { wch: 14 }, { wch: 10 }, { wch: 12 }];
+        yearWs['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }];
+
+        if (yearWs['A1']) yearWs['A1'].s = titleStyle;
+        const yearHeaderRow = 2;
+        for (let c = 0; c < 6; c++) {
+          const cr = XLSX.utils.encode_cell({ r: yearHeaderRow, c });
+          if (yearWs[cr]) yearWs[cr].s = headerStyle;
+        }
+        const yearTotalRow = yearRows.length - 1;
+        for (let c = 0; c < 6; c++) {
+          const cr = XLSX.utils.encode_cell({ r: yearTotalRow, c });
+          if (yearWs[cr]) yearWs[cr].s = summaryStyle;
+        }
+
+        XLSX.utils.book_append_sheet(workbook, yearWs, `${year} yil xulosasi`);
+      }
+
+      const monthName = monthNames[Number(month) - 1];
+      const fileName = `Tolovlar_${monthName}_${year}.xlsx`;
 
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
+      res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fileName)}`);
 
       const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
       res.send(buffer);

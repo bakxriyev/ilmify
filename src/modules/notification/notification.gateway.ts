@@ -1,11 +1,17 @@
-import { WebSocketGateway, WebSocketServer, OnGatewayConnection, OnGatewayDisconnect } from '@nestjs/websockets';
+import { WebSocketGateway, WebSocketServer, OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import * as jwt from 'jsonwebtoken';
 
 @WebSocketGateway({ cors: true })
-export class NotificationGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class NotificationGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
+  static ioServer: Server;
+
   @WebSocketServer()
   server: Server;
+
+  afterInit(server: Server) {
+    NotificationGateway.ioServer = server;
+  }
 
   handleConnection(client: Socket) {
     const userId = client.handshake.query.userId as string;

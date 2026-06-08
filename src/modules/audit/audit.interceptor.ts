@@ -1,15 +1,15 @@
 import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Logger } from '@nestjs/common';
 import { Observable, tap } from 'rxjs';
 import { AuditService } from './audit.service';
-import { AuditGateway } from './audit.gateway';
+import { NotificationGateway } from '../notification/notification.gateway';
 
 @Injectable()
 export class AuditInterceptor implements NestInterceptor {
   private readonly logger = new Logger(AuditInterceptor.name);
+  private warned = false;
 
   constructor(
     private readonly auditService: AuditService,
-    private readonly auditGateway: AuditGateway,
   ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
@@ -49,7 +49,7 @@ export class AuditInterceptor implements NestInterceptor {
               });
 
               if (logEntry && centerId) {
-                this.auditGateway.emitAudit(centerId, logEntry.toJSON());
+                this.emitWebSocket(centerId, logEntry.toJSON());
               }
             }
           } catch (err) {
@@ -59,6 +59,23 @@ export class AuditInterceptor implements NestInterceptor {
         error: () => {},
       }),
     );
+  }
+
+  private emitWebSocket(centerId: number, data: any) {
+    try {
+      const server = NotificationGateway.ioServer;
+      if (server) {
+        server.to(`center-${centerId}`).emit('audit', data);
+      } else if (!this.warned) {
+        this.warned = true;
+        this.logger.warn('WebSocket server not ready yet');
+      }
+    } catch (err) {
+      if (!this.warned) {
+        this.warned = true;
+        this.logger.error('Failed to emit audit via WebSocket', err);
+      }
+    }
   }
 
   private parseRequest(method: string, url: string, body: any, response: any): {

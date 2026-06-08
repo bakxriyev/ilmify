@@ -575,10 +575,8 @@ export class PaymentService {
 
   async exportToExcel(month: number, year: number, center_id?: number) {
     const data = await this.getStudentsOverview(month, year, center_id);
-    
     const monthNames = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'];
-    
-    // Prepare data for export
+
     const exportData = data.map((item: any, index: number) => ({
       'No': index + 1,
       'Student Ismi': `${item.student.first_name} ${item.student.last_name}`,
@@ -591,11 +589,20 @@ export class PaymentService {
       'To\'langan': item.paid_amount,
       'Qarz': item.debt,
       'Status': item.status === 'paid' ? 'To\'langan' : item.status === 'unpaid' ? 'To\'lanmagan' : 'Qisman',
-      'Kechikgan kunlar': item.overdue_days,
-      'Izoh': item.payment?.note || '-',
+      'Kechikkan darslar': item.overdue_lessons || 0,
+      'Izoh': item.payment?.note || '',
     }));
 
-    return exportData;
+    const totalStudents = data.length;
+    const totalPaid = data.filter((i: any) => i.status === 'paid').length;
+    const totalUnpaid = data.filter((i: any) => i.status === 'unpaid').length;
+    const totalPartial = data.filter((i: any) => i.status === 'partial').length;
+    const sumOylik = data.reduce((s: number, i: any) => s + Number(i.monthly_price), 0);
+    const sumEffective = data.reduce((s: number, i: any) => s + Number(i.effective_price), 0);
+    const sumPaid = data.reduce((s: number, i: any) => s + Number(i.paid_amount), 0);
+    const sumDebt = data.reduce((s: number, i: any) => s + Number(i.debt), 0);
+
+    return { exportData, summary: { totalStudents, totalPaid, totalUnpaid, totalPartial, sumOylik, sumEffective, sumPaid, sumDebt, month, year } };
   }
 
   async getStudentDebts(studentId: number) {

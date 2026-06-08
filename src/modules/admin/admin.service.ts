@@ -365,7 +365,7 @@ export class AdminService {
       refresh_token: null,
     });
 
-    return { message: 'Logout successful' };
+    return { message: 'Logout successfully' };
   }
 
   // Parolni tekshirish

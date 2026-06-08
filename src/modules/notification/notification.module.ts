@@ -24,7 +24,7 @@ import { PaymentModel } from '../payments/entities/payment.entity';
     ]),
   ],
   providers: [NotificationGateway, NotificationService],
-  exports: [NotificationService, NotificationGateway],
+  exports: [NotificationService],
   controllers: [NotificationController],
 })
 export class NotificationModule {}

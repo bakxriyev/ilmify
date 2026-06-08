@@ -1,7 +1,7 @@
-import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Logger, Inject } from '@nestjs/common';
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Logger } from '@nestjs/common';
 import { Observable, tap } from 'rxjs';
 import { AuditService } from './audit.service';
-import { NotificationGateway } from '../notification/notification.gateway';
+import { AuditGateway } from './audit.gateway';
 
 @Injectable()
 export class AuditInterceptor implements NestInterceptor {
@@ -9,7 +9,7 @@ export class AuditInterceptor implements NestInterceptor {
 
   constructor(
     private readonly auditService: AuditService,
-    @Inject(NotificationGateway) private readonly notificationGateway: NotificationGateway,
+    private readonly auditGateway: AuditGateway,
   ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
@@ -17,10 +17,8 @@ export class AuditInterceptor implements NestInterceptor {
     const { method, originalUrl, body } = request;
     const user = request.user;
 
-    // Skip GET requests (reading is not an action)
     if (method === 'GET') return next.handle();
 
-    // Skip auth/login endpoints
     if (originalUrl.includes('/auth/') || originalUrl.includes('/admin/login') || originalUrl.includes('/teachers/login')) {
       return next.handle();
     }
@@ -50,22 +48,15 @@ export class AuditInterceptor implements NestInterceptor {
                 },
               });
 
-              // Real-time audit event ni WebSocket orqali yuborish
               if (logEntry && centerId) {
-                try {
-                  this.notificationGateway.emitToCenter('audit', centerId, logEntry.toJSON());
-                } catch (wsErr) {
-                  this.logger.error('Failed to emit audit via WebSocket', wsErr);
-                }
+                this.auditGateway.emitAudit(centerId, logEntry.toJSON());
               }
             }
           } catch (err) {
             this.logger.error('Audit interceptor error', err);
           }
         },
-        error: (err: any) => {
-          // Don't log on failed requests
-        },
+        error: () => {},
       }),
     );
   }

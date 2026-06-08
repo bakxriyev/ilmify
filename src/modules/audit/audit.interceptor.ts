@@ -1,14 +1,17 @@
-import { Injectable, NestInterceptor, ExecutionContext, CallHandler } from '@nestjs/common';
+import { Injectable, NestInterceptor, ExecutionContext, CallHandler, Logger } from '@nestjs/common';
 import { Observable, tap } from 'rxjs';
 import { AuditService } from './audit.service';
 
 @Injectable()
 export class AuditInterceptor implements NestInterceptor {
+  private readonly logger = new Logger(AuditInterceptor.name);
+
   constructor(private readonly auditService: AuditService) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const request = context.switchToHttp().getRequest();
-    const { method, originalUrl, body, user } = request;
+    const { method, originalUrl, body } = request;
+    const user = request.user;
 
     // Skip GET requests (reading is not an action)
     if (method === 'GET') return next.handle();
@@ -21,28 +24,37 @@ export class AuditInterceptor implements NestInterceptor {
     const now = Date.now();
 
     return next.handle().pipe(
-      tap((responseBody: any) => {
-        try {
-          const duration = Date.now() - now;
-          const adminId = user?.id || user?.adminId || 0;
-          const adminName = user?.name || user?.full_name || user?.first_name || 'Unknown';
-          const centerId = user?.center_id || null;
+      tap({
+        next: (responseBody: any) => {
+          try {
+            const duration = Date.now() - now;
+            const adminId = user?.id || user?.adminId || 0;
+            const adminName = user?.name || user?.full_name || user?.first_name || 'Unknown';
+            const centerId = request.center_id || user?.center_id || null;
 
-          const parsed = this.parseRequest(method, originalUrl, body, responseBody);
+            const parsed = this.parseRequest(method, originalUrl, body, responseBody);
 
-          if (parsed) {
-            this.auditService.log({
-              admin_id: adminId,
-              admin_name: adminName,
-              center_id: centerId,
-              ...parsed,
-              details: {
-                duration,
-                requestBody: this.sanitizeBody(body),
-              },
-            });
+            if (parsed) {
+              this.auditService.log({
+                admin_id: adminId,
+                admin_name: adminName,
+                center_id: centerId,
+                ...parsed,
+                details: {
+                  duration: `${duration}ms`,
+                  requestBody: this.sanitizeBody(body),
+                },
+              }).catch(err => {
+                this.logger.error('Failed to save audit log', err);
+              });
+            }
+          } catch (err) {
+            this.logger.error('Audit interceptor error', err);
           }
-        } catch {}
+        },
+        error: (err: any) => {
+          // Don't log on failed requests
+        },
       }),
     );
   }
@@ -106,6 +118,7 @@ export class AuditInterceptor implements NestInterceptor {
       levels: 'level',
       parents: 'parent',
       admins: 'admin',
+      admin: 'admin',
       leads: 'lead',
       notifications: 'notification',
       'auto-notification': 'auto_notification',

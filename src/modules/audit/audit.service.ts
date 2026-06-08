@@ -59,7 +59,7 @@ export class AuditService {
       where.created_at = { ...where.created_at, [Op.gte]: new Date(from_date) };
     }
     if (to_date) {
-      where.created_at = { ...where.created_at, [Op.lte]: new Date(to_date) };
+      where.created_at = { ...where.created_at, [Op.lte]: new Date(to_date + 'T23:59:59.999Z') };
     }
 
     const { rows, count } = await this.auditLogModel.findAndCountAll({
@@ -80,8 +80,12 @@ export class AuditService {
     };
   }
 
-  async getActions(): Promise<string[]> {
+  async getActions(center_id?: number): Promise<string[]> {
+    const where: any = {};
+    if (center_id) where.center_id = center_id;
+
     const rows = await this.auditLogModel.findAll({
+      where,
       attributes: ['action'],
       group: ['action'],
       order: [['action', 'ASC']],
@@ -89,8 +93,12 @@ export class AuditService {
     return rows.map(r => r.action);
   }
 
-  async getEntityTypes(): Promise<string[]> {
+  async getEntityTypes(center_id?: number): Promise<string[]> {
+    const where: any = {};
+    if (center_id) where.center_id = center_id;
+
     const rows = await this.auditLogModel.findAll({
+      where,
       attributes: ['entity_type'],
       group: ['entity_type'],
       order: [['entity_type', 'ASC']],

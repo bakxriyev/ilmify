@@ -5,6 +5,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { BadRequestException, ValidationPipe, ForbiddenException } from '@nestjs/common';
 import { ExceptionHandlerFilter } from './filters/exception-handler';
 import * as express from 'express';
+import * as jwt from 'jsonwebtoken';
 import { join } from 'path';
 import { Request, Response, NextFunction } from 'express';
 
@@ -45,6 +46,23 @@ async function bootstrap() {
     const centerId = req.headers['x-center-id'];
     if (centerId) {
       (req as any).center_id = Number(centerId);
+    }
+    next();
+  });
+
+  // JWT middleware - barcha requestlar uchun tokenni dekod qiladi va req.user ni set qiladi
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const authHeader = req.headers['authorization'];
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.slice(7);
+      const secrets = ['secret123', process.env.JWT_SECRET || 'secret123', process.env.JWT_ACCESS_SECRET || 'kamron'].filter(Boolean);
+      for (const secret of secrets) {
+        try {
+          const payload = jwt.verify(token, secret) as any;
+          (req as any).user = payload;
+          break;
+        } catch {}
+      }
     }
     next();
   });

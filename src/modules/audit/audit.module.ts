@@ -12,7 +12,6 @@ import { AuditInterceptor } from './audit.interceptor';
   controllers: [AuditController],
   providers: [
     AuditService,
-    AuditInterceptor,
     {
       provide: APP_INTERCEPTOR,
       useClass: AuditInterceptor,

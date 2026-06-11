@@ -4,6 +4,7 @@ import { Type } from 'class-transformer';
 
 class AttendanceItem {
   @ApiProperty({ example: 30 })
+  @Type(() => Number)
   @IsNumber()
   student_id: number;
 
@@ -19,6 +20,7 @@ class AttendanceItem {
 
 export class MarkLessonAttendanceDto {
   @ApiProperty({ example: 562 })
+  @Type(() => Number)
   @IsNumber()
   lesson_id: number;
 

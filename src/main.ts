@@ -15,16 +15,20 @@ async function bootstrap() {
 
   app.useGlobalPipes(
     new ValidationPipe({
+      transform: true,
       exceptionFactory(errors) {
-        const errorMsgs = errors.map((err) =>
-          Object.values(err.constraints).join(', '),
-        );
-        throw new BadRequestException(errorMsgs.join(' && '));
+        const messages: string[] = [];
+        function extract(errs: any[]) {
+          for (const e of errs) {
+            if (e.constraints) messages.push(...Object.values(e.constraints) as string[]);
+            if (e.children?.length) extract(e.children);
+          }
+        }
+        extract(errors);
+        throw new BadRequestException(messages.join(' && '));
       },
     }),
   );
-
-  app.useGlobalPipes(new ValidationPipe({ transform: true }));
 
   app.useGlobalFilters(new ExceptionHandlerFilter());
 

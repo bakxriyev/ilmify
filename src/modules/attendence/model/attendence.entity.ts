@@ -10,7 +10,12 @@ import { GroupModel } from 'src/modules/groups/model/group.entity';
 import { StudentModel } from 'src/modules/students/model/student.entity';
 import { GroupLessonModel } from '../../group-lesson/entities/group-lesson.entity';
 
-@Table({ tableName: 'attendances', timestamps: true })
+@Table({ tableName: 'attendances', timestamps: true, indexes: [
+  { fields: ['student_id'] },
+  { fields: ['group_id', 'date'] },
+  { fields: ['group_id', 'date', 'is_present'] },
+  { fields: ['student_id', 'is_present'] },
+] })
 export class AttendanceModel extends Model {
   @Column({ type: DataType.BIGINT, autoIncrement: true, primaryKey: true })
   id: number;

@@ -10,7 +10,10 @@ import { GroupModel } from '../../groups/model/group.entity';
 import { UnitModel } from '../../units/model';
 import { RoomModel } from '../../rooms/entities/room.entity';
 
-@Table({ tableName: 'group_lessons', timestamps: false })
+@Table({ tableName: 'group_lessons', timestamps: false, indexes: [
+  { fields: ['group_id', 'date'] },
+  { fields: ['group_id'] },
+] })
 export class GroupLessonModel extends Model<GroupLessonModel> {
   @Column({ type: DataType.BIGINT, autoIncrement: true, primaryKey: true })
   id: number;

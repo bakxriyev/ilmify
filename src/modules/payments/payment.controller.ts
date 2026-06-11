@@ -139,8 +139,8 @@ export class PaymentController {
 
   @Get('debts/:studentId')
   @ApiOperation({ summary: "O'quvchining barcha qarzdorliklari" })
-  getStudentDebts(@Param('studentId') studentId: string) {
-    return this.service.getStudentDebts(Number(studentId));
+  getStudentDebts(@Param('studentId') studentId: string, @Req() req?: any) {
+    return this.service.getStudentDebts(Number(studentId), req?.center_id);
   }
 
   @Get('export')

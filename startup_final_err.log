@@ -1,0 +1,9 @@
+C:\Users\Administrator\Desktop\ilmify\dist\src\main.js:91
+    app.use(compression());
+            ^
+
+TypeError: compression is not a function
+    at bootstrap (C:\Users\Administrator\Desktop\ilmify\dist\src\main.js:91:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+
+Node.js v25.2.1

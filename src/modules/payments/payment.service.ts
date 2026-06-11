@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/sequelize';
-import { Op } from 'sequelize';
+import { InjectModel, InjectConnection } from '@nestjs/sequelize';
+import { Op, Sequelize } from 'sequelize';
+import { QueryTypes } from 'sequelize';
 import { PaymentModel, PaymentStatus } from './entities/payment.entity';
 import { StudentModel } from '../students/model/student.entity';
 import { GroupModel } from '../groups/model/group.entity';
@@ -23,6 +24,7 @@ export class PaymentService {
     @InjectModel(ParentStudentModel) private parentStudentModel: typeof ParentStudentModel,
     @InjectModel(ParentModel) private parentModel: typeof ParentModel,
     private notificationService: NotificationService,
+    @InjectConnection() private sequelize: Sequelize,
   ) {}
 
   async create(dto: CreatePaymentDto) {
@@ -42,6 +44,7 @@ export class PaymentService {
       paid_at = new Date().toISOString().split('T')[0];
     }
 
+    const centerId = (dto as any).center_id || student.center_id || null;
     const payment = await this.paymentModel.create({
       student_id: dto.student_id,
       group_id: dto.group_id,
@@ -51,7 +54,7 @@ export class PaymentService {
       status: dto.status || PaymentStatus.PAID,
       paid_at,
       note: dto.note || null,
-      center_id: (dto as any).center_id || null,
+      center_id: centerId,
     });
 
     return this.paymentModel.findByPk(payment.id, {
@@ -99,7 +102,6 @@ export class PaymentService {
     const monthEnd = new Date(year, month, 0, 23, 59, 59);
     const isCurrentMonth = month === now.getMonth() + 1 && year === now.getFullYear();
 
-    // 1. Shu oyda guruhda bo'lgan studentlarni topish
     const relationWhere: any = {};
     if (isCurrentMonth) {
       relationWhere.left_date = null;
@@ -132,15 +134,12 @@ export class PaymentService {
       ],
     });
 
-    // 2. Shu oy ichida to'lov qilgan studentlarni ham olish (guruhdan chiqib ketgan bo'lsa ham)
     const paymentsWhere: any = { month, year };
     if (center_id) paymentsWhere.center_id = center_id;
     const allPayments = await this.paymentModel.findAll({ where: paymentsWhere });
 
-    // 3. Ikkalasini birlashtirish — har bir student faqat 1 marta
     const studentMap = new Map<number, any>();
 
-    // Avval guruhdagi studentlarni qo'shamiz
     for (const rel of relations) {
       const relJson = rel.toJSON() as any;
       const student = relJson.student;
@@ -157,16 +156,29 @@ export class PaymentService {
       }
     }
 
-    // Keyin to'lov qilganlarni qo'shamiz (agar mavjud bo'lmasa)
-    for (const p of allPayments) {
-      const pJson = p.toJSON() as any;
-      const key = Number(pJson.student_id);
-      if (!studentMap.has(key)) {
-        // Studentni alohida yuklaymiz
-        const stu = await this.studentModel.findByPk(key, { attributes: ['id', 'first_name', 'last_name', 'phone_number'] });
-        if (!stu) continue;
-        if (!pJson.group_id) continue; // Guruhi o'chirilgan to'lovlarni overview-da ko'rsatmaymiz
-        const grp = await this.groupModel.findByPk(pJson.group_id, { attributes: ['id', 'name', 'monthly_price'] });
+    const paymentStudentsToLoad = allPayments
+      .filter(p => !studentMap.has(Number(p.student_id)) && p.group_id)
+      .map(p => Number(p.student_id));
+    const uniqueStudentIds = [...new Set(paymentStudentsToLoad)];
+    if (uniqueStudentIds.length > 0) {
+      const extraStudents = await this.studentModel.findAll({
+        where: { id: uniqueStudentIds },
+        attributes: ['id', 'first_name', 'last_name', 'phone_number'],
+      });
+      const extraStudentMap = new Map(extraStudents.map(s => [Number(s.id), s]));
+      const extraGroupIds = [...new Set(allPayments.filter(p => uniqueStudentIds.includes(Number(p.student_id)) && p.group_id).map(p => Number(p.group_id)))];
+      const extraGroups = extraGroupIds.length > 0 ? await this.groupModel.findAll({
+        where: { id: extraGroupIds },
+        attributes: ['id', 'name', 'monthly_price'],
+      }) : [];
+      const extraGroupMap = new Map(extraGroups.map(g => [Number(g.id), g]));
+
+      for (const p of allPayments) {
+        const key = Number(p.student_id);
+        if (studentMap.has(key)) continue;
+        const stu = extraStudentMap.get(key);
+        if (!stu || !p.group_id) continue;
+        const grp = extraGroupMap.get(Number(p.group_id));
         if (!grp) continue;
         studentMap.set(key, {
           student: { id: key, first_name: stu.first_name, last_name: stu.last_name, phone_number: stu.phone_number },
@@ -176,14 +188,35 @@ export class PaymentService {
       }
     }
 
-    // 4. Barcha guruhlar uchun oylik darslar sonini oldindan hisoblaymiz (proration uchun)
     const groupIds = [...new Set(relations.map(r => Number(r.group_id)))];
     const totalLessonsPerGroup = new Map<number, number>();
-    for (const gid of groupIds) {
-      const count = await this.groupLessonModel.count({
-        where: { group_id: gid, date: { [Op.gte]: monthStart, [Op.lt]: monthEnd } },
-      });
-      totalLessonsPerGroup.set(gid, count);
+    if (groupIds.length > 0) {
+      const lessonCounts = await this.groupLessonModel.findAll({
+        attributes: ['group_id', [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']],
+        where: { group_id: groupIds, date: { [Op.gte]: monthStart, [Op.lt]: monthEnd } },
+        group: ['group_id'],
+        raw: true,
+      }) as any[];
+      for (const row of lessonCounts) {
+        totalLessonsPerGroup.set(Number(row.group_id), Number(row.count));
+      }
+    }
+
+    const relationsWithJoinAfterStart = relations.filter(r => {
+      const gid = Number(r.group_id);
+      return totalLessonsPerGroup.get(gid) > 0 && new Date(r.joined_date) > monthStart;
+    });
+    const remainingLessonsMap = new Map<string, number>();
+    if (relationsWithJoinAfterStart.length > 0) {
+      for (const rel of relationsWithJoinAfterStart) {
+        const gid = Number(rel.group_id);
+        const joinDate = new Date(rel.joined_date);
+        const key = `${gid}-${joinDate.getTime()}`;
+        const count = await this.groupLessonModel.count({
+          where: { group_id: gid, date: { [Op.gte]: joinDate, [Op.lt]: monthEnd } },
+        });
+        remainingLessonsMap.set(key, count);
+      }
     }
 
     const result: any[] = [];
@@ -192,22 +225,20 @@ export class PaymentService {
       const groupId = entry.relationGroupId;
       const totalLessons = totalLessonsPerGroup.get(groupId) || 0;
 
-      // Studentning shu oydagi barcha to'lovlarini topamiz (istalgan guruh bo'yicha)
       const studentPayments = allPayments.filter(p => Number(p.student_id) === entry.student.id);
-      const totalPaidAmount = studentPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+      const paidPayments = studentPayments.filter(p => p.status === PaymentStatus.PAID);
+      const totalPaidAmount = paidPayments.reduce((sum, p) => sum + Number(p.amount), 0);
       const latestPayment = studentPayments.length > 0 ? studentPayments.reduce((latest, p) =>
         new Date(p.created_at) > new Date(latest.created_at) ? p : latest
       ) : null;
 
-      // Proratsiya: o'quvchi qo'shilgan sanadan boshlab qolgan darslar soniga qarab narxni hisoblash
       const relation = relations.find(r => Number(r.student_id) === entry.student.id && Number(r.group_id) === groupId);
       let effectivePrice = monthlyPrice;
       if (totalLessons > 0 && relation) {
         const joinDate = new Date(relation.joined_date);
         if (joinDate > monthStart) {
-          const remainingLessons = await this.groupLessonModel.count({
-            where: { group_id: groupId, date: { [Op.gte]: joinDate, [Op.lt]: monthEnd } },
-          });
+          const rlKey = `${groupId}-${joinDate.getTime()}`;
+          const remainingLessons = remainingLessonsMap.get(rlKey) || 0;
           if (remainingLessons > 0) {
             effectivePrice = Math.round((monthlyPrice / totalLessons) * remainingLessons);
           } else {
@@ -216,7 +247,6 @@ export class PaymentService {
         }
       }
 
-      // Status: to'lov summasiga qarab
       let status = PaymentStatus.UNPAID;
       if (totalPaidAmount >= effectivePrice && effectivePrice > 0) {
         status = PaymentStatus.PAID;
@@ -237,9 +267,7 @@ export class PaymentService {
         effective_price: effectivePrice,
         paid_amount: totalPaidAmount,
         debt,
-        overdue_lessons: status === PaymentStatus.PAID ? 0 : await this.groupLessonModel.count({
-          where: { group_id: groupId, date: { [Op.lt]: now } },
-        }),
+        overdue_lessons: status === PaymentStatus.PAID ? 0 : totalLessons,
       });
     }
 
@@ -357,23 +385,34 @@ export class PaymentService {
 
     const overdueDays = Math.max(0, Math.floor((now.getTime() - monthStart.getTime()) / (1000 * 60 * 60 * 24)));
 
-    return Promise.all(students.map(async (s) => {
+    const studentsNeedingProration = students.filter(s => {
+      if (totalLessonsInMonth === 0) return false;
+      const joinDate = joinDateMap.get(Number(s.id));
+      return joinDate && joinDate > monthStart;
+    });
+    const remainingLessonsMap = new Map<number, number>();
+    if (studentsNeedingProration.length > 0) {
+      const results: any[] = [];
+      for (const s of studentsNeedingProration) {
+        const joinDate = joinDateMap.get(Number(s.id))!;
+        const key = Number(s.id);
+        const count = await this.groupLessonModel.count({
+          where: { group_id: groupId, date: { [Op.gte]: joinDate, [Op.lt]: monthEnd } },
+        });
+        remainingLessonsMap.set(key, count);
+      }
+    }
+
+    const result = students.map((s) => {
       const payment = payments.find(p => Number(p.student_id) === Number(s.id));
       const status = payment?.status || PaymentStatus.UNPAID;
-      const paidAmount = payment ? Number(payment.amount) : 0;
+      const paidAmount = payment && payment.status === PaymentStatus.PAID ? Number(payment.amount) : 0;
 
-      // Prorate monthly_price based on remaining lessons from join date
       let effectivePrice = monthlyPrice;
       if (totalLessonsInMonth > 0 && status !== PaymentStatus.PAID) {
         const joinDate = joinDateMap.get(Number(s.id));
         if (joinDate && joinDate > monthStart) {
-          // Aniq: qo'shilgan sanadan boshlab oy oxirigacha nechta dars qolgan
-          const remainingLessons = await this.groupLessonModel.count({
-            where: {
-              group_id: groupId,
-              date: { [Op.gte]: joinDate, [Op.lt]: monthEnd },
-            },
-          });
+          const remainingLessons = remainingLessonsMap.get(Number(s.id)) || 0;
           if (remainingLessons > 0) {
             const pricePerLesson = monthlyPrice / totalLessonsInMonth;
             effectivePrice = Math.round(pricePerLesson * remainingLessons);
@@ -399,7 +438,9 @@ export class PaymentService {
         overdue_days: status === PaymentStatus.PAID ? 0 : overdueDays,
         joined_date: joinDateMap.get(Number(s.id))?.toISOString().split('T')[0] || null,
       };
-    }));
+    });
+
+    return result;
   }
 
   async update(id: number, dto: UpdatePaymentDto) {
@@ -448,42 +489,77 @@ export class PaymentService {
     const monthStart = new Date(year, month - 1, 1);
     const monthEnd = new Date(year, month, 0, 23, 59, 59);
     const groups = await this.groupModel.findAll({ where: { monthly_price: { [Op.gt]: 0 } } });
+    if (groups.length === 0) return { created: 0, month, year };
+
+    const groupIds = groups.map(g => Number(g.id));
     let created = 0;
+
+    const totalLessonsByGroup = new Map<number, number>();
+    const lessonRows = await this.groupLessonModel.findAll({
+      attributes: ['group_id', [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']],
+      where: { group_id: groupIds, date: { [Op.gte]: monthStart, [Op.lt]: monthEnd } },
+      group: ['group_id'],
+      raw: true,
+    }) as any[];
+    for (const row of lessonRows) {
+      totalLessonsByGroup.set(Number(row.group_id), Number(row.count));
+    }
+
+    const existingPayments = await this.paymentModel.findAll({
+      where: { month, year, group_id: groupIds },
+      attributes: ['student_id', 'group_id'],
+      raw: true,
+    });
+    const existingSet = new Set<string>();
+    for (const p of existingPayments as any[]) {
+      existingSet.add(`${p.student_id}-${p.group_id}`);
+    }
+
+    const studentCenterIds = new Map<number, number | null>();
     for (const group of groups) {
+      const totalLessonsInMonth = totalLessonsByGroup.get(Number(group.id)) || 0;
       const monthlyPrice = Number(group.monthly_price);
-      // Oy uchun jami darslar soni
-      const totalLessonsInMonth = await this.groupLessonModel.count({
-        where: { group_id: group.id, date: { [Op.gte]: monthStart, [Op.lt]: monthEnd } },
+      const relations = await this.groupStudentModel.findAll({
+        where: { group_id: group.id },
+        attributes: ['student_id', 'joined_date'],
       });
-      const relations = await this.groupStudentModel.findAll({ where: { group_id: group.id } });
+
       for (const rel of relations) {
-        const exists = await this.paymentModel.findOne({ where: { student_id: rel.student_id, month, year } });
-        if (!exists) {
-          // Proratsiya: qo'shilgan sanadan qolgan darslar hisobiga
-          let amount = monthlyPrice;
-          if (totalLessonsInMonth > 0 && rel.joined_date) {
-            const joinDate = new Date(rel.joined_date);
-            if (joinDate > monthStart) {
-              const remainingLessons = await this.groupLessonModel.count({
-                where: { group_id: group.id, date: { [Op.gte]: joinDate, [Op.lt]: monthEnd } },
-              });
-              if (remainingLessons > 0) {
-                amount = Math.round((monthlyPrice / totalLessonsInMonth) * remainingLessons);
-              } else {
-                amount = 0;
-              }
+        const key = `${rel.student_id}-${group.id}`;
+        if (existingSet.has(key)) continue;
+
+        let amount = monthlyPrice;
+        if (totalLessonsInMonth > 0 && rel.joined_date) {
+          const joinDate = new Date(rel.joined_date);
+          if (joinDate > monthStart) {
+            const remainingLessons = await this.groupLessonModel.count({
+              where: { group_id: group.id, date: { [Op.gte]: joinDate, [Op.lt]: monthEnd } },
+            });
+            if (remainingLessons > 0) {
+              amount = Math.round((monthlyPrice / totalLessonsInMonth) * remainingLessons);
+            } else {
+              amount = 0;
             }
           }
-          await this.paymentModel.create({
-            student_id: rel.student_id,
-            group_id: group.id,
-            amount,
-            month,
-            year,
-            status: PaymentStatus.UNPAID,
-          });
-          created++;
         }
+
+        let centerId = studentCenterIds.get(Number(rel.student_id));
+        if (centerId === undefined) {
+          const stu = await this.studentModel.findByPk(rel.student_id, { attributes: ['center_id'] });
+          centerId = stu?.center_id || null;
+          studentCenterIds.set(Number(rel.student_id), centerId);
+        }
+
+        await this.paymentModel.create({
+          student_id: rel.student_id,
+          group_id: group.id,
+          amount,
+          month,
+          year,
+          status: PaymentStatus.UNPAID,
+          center_id: centerId,
+        });
+        created++;
       }
     }
     return { created, month, year };
@@ -605,11 +681,14 @@ export class PaymentService {
     return { exportData, summary: { totalStudents, totalPaid, totalUnpaid, totalPartial, sumOylik, sumEffective, sumPaid, sumDebt, month, year } };
   }
 
-  async getStudentDebts(studentId: number) {
+  async getStudentDebts(studentId: number, center_id?: number) {
     const student = await this.studentModel.findByPk(studentId, {
-      attributes: ['id', 'first_name', 'last_name', 'phone_number'],
+      attributes: ['id', 'first_name', 'last_name', 'phone_number', 'center_id'],
     });
     if (!student) throw new NotFoundException('Student topilmadi');
+    if (center_id && Number(student.center_id) !== center_id) {
+      throw new NotFoundException('Student topilmadi');
+    }
 
     const now = new Date();
     const debts: any[] = [];
@@ -617,20 +696,38 @@ export class PaymentService {
     const orphanedPayments: any[] = [];
     const processedMonths = new Set<string>();
 
-    // 1. BARCHA to'lovlarni olish
     const allPayments = await this.paymentModel.findAll({
       where: { student_id: studentId },
       include: [{ model: GroupModel, attributes: ['id', 'name', 'monthly_price'] }],
     });
 
-    // 2. Guruhga biriktirilganlik ma'lumotlari
     const groupStudents = await this.groupStudentModel.findAll({
       where: { student_id: studentId },
       include: [{ model: GroupModel, as: 'group', attributes: ['id', 'name', 'monthly_price'] }],
     });
 
-    // 3. HAR BIR GURUH UCHUN OYLARNI TAKRORLASH
-    //    (faqat group_id != null bo'lgan to'lovlar va guruhdagi studentlar)
+    const groupIds = groupStudents.map(gs => Number(gs.group_id)).filter(Boolean);
+    const lessonCountByGroupMonth = new Map<string, number>();
+    if (groupIds.length > 0) {
+      const lessonRows = await this.sequelize.query(`
+        SELECT
+          group_id,
+          EXTRACT(YEAR FROM date)::int as year,
+          EXTRACT(MONTH FROM date)::int as month,
+          COUNT(*)::int as count
+        FROM group_lessons
+        WHERE group_id = ANY($1::int[])
+        GROUP BY group_id, EXTRACT(YEAR FROM date), EXTRACT(MONTH FROM date)
+      `, {
+        bind: [groupIds],
+        type: QueryTypes.SELECT,
+      }) as any[];
+      for (const row of lessonRows) {
+        const key = `${row.group_id}-${row.year}-${row.month}`;
+        lessonCountByGroupMonth.set(key, row.count);
+      }
+    }
+
     for (const groupStudent of groupStudents) {
       const group = (groupStudent as any).group;
       if (!group) continue;
@@ -656,100 +753,53 @@ export class PaymentService {
 
         const monthStart = new Date(year, month - 1, 1);
         const monthEnd = new Date(year, month, 0, 23, 59, 59);
-        const isCurrentMonth = month === now.getMonth() + 1 && year === now.getFullYear();
+        const lessonKey = `${groupId}-${year}-${month}`;
+        const totalLessons = lessonCountByGroupMonth.get(lessonKey) || 0;
 
-        if (isCurrentMonth) {
-          // HOZIRGI OY: FULL PRICE (proratsiya YO'Q)
-          // Chunki student hali barcha darslarga qatnashishi mumkin
-          const payment = allPayments.find(p =>
-            Number(p.month) === month &&
-            Number(p.year) === year &&
-            Number(p.group_id) === groupId
-          );
-          if (payment) {
-            const paidAmount = Number(payment.amount);
-            if (paidAmount >= monthlyPrice) {
-              paidPayments.push({
-                id: payment.id, month, year,
-                group_id: groupId, group_name: group.name,
-                amount: paidAmount, status: 'paid',
-                paid_at: payment.paid_at,
-              });
-            } else if (paidAmount > 0) {
-              paidPayments.push({
-                id: payment.id, month, year,
-                group_id: groupId, group_name: group.name,
-                amount: paidAmount, status: 'partial',
-                paid_at: payment.paid_at,
-              });
-              debts.push({
-                month, year,
-                group_id: groupId, group_name: group.name,
-                amount: monthlyPrice - paidAmount,
-                full_amount: monthlyPrice, paid_amount: paidAmount,
-                status: 'partial',
-              });
-            } else {
-              debts.push({
-                month, year,
-                group_id: groupId, group_name: group.name,
-                amount: monthlyPrice, status: 'unpaid',
-              });
-            }
-          } else {
-            // Hozirgi oy uchun to'lov yo'q → FULL PRICE bilan qarzdorlik
-            debts.push({
-              month, year,
-              group_id: groupId, group_name: group.name,
-              amount: monthlyPrice,
-              status: 'unpaid',
-              is_auto_generated: true,
+        const payment = allPayments.find(p =>
+          Number(p.month) === month &&
+          Number(p.year) === year &&
+          Number(p.group_id) === groupId
+        );
+
+        if (totalLessons === 0 && !payment) {
+          currentDate = new Date(year, month, 1);
+          continue;
+        }
+
+        let effectivePrice = 0;
+        if (totalLessons > 0) {
+          effectivePrice = monthlyPrice;
+          if (joinedDate > monthStart) {
+            const remainingLessons = await this.groupLessonModel.count({
+              where: { group_id: groupId, date: { [Op.gte]: joinedDate, [Op.lt]: monthEnd } },
             });
-          }
-        } else {
-          // O'TGAN OYLAR: Proratsiya bo'yicha hisoblash
-          const totalLessons = await this.groupLessonModel.count({
-            where: { group_id: groupId, date: { [Op.gte]: monthStart, [Op.lt]: monthEnd } },
-          });
-
-          let effectivePrice = monthlyPrice;
-          let remainingLessons = totalLessons;
-
-          if (totalLessons > 0) {
-            if (joinedDate > monthStart) {
-              remainingLessons = await this.groupLessonModel.count({
-                where: { group_id: groupId, date: { [Op.gte]: joinedDate, [Op.lt]: monthEnd } },
-              });
-            }
             if (remainingLessons > 0) {
               effectivePrice = Math.round((monthlyPrice / totalLessons) * remainingLessons);
             } else {
               effectivePrice = 0;
             }
           }
+        }
 
-          const payment = allPayments.find(p =>
-            Number(p.month) === month &&
-            Number(p.year) === year &&
-            Number(p.group_id) === groupId
-          );
-
-          if (payment) {
-            const paidAmount = Number(payment.amount);
-            if (paidAmount >= effectivePrice) {
-              paidPayments.push({
-                id: payment.id, month, year,
-                group_id: groupId, group_name: group.name,
-                amount: paidAmount, status: 'paid',
-                paid_at: payment.paid_at,
-              });
-            } else if (paidAmount > 0) {
-              paidPayments.push({
-                id: payment.id, month, year,
-                group_id: groupId, group_name: group.name,
-                amount: paidAmount, status: 'partial',
-                paid_at: payment.paid_at,
-              });
+        if (payment) {
+          const paidAmount = Number(payment.amount);
+          const isPaid = payment.status === PaymentStatus.PAID;
+          if (isPaid && paidAmount >= effectivePrice && effectivePrice > 0) {
+            paidPayments.push({
+              id: payment.id, month, year,
+              group_id: groupId, group_name: group.name,
+              amount: paidAmount, status: 'paid',
+              paid_at: payment.paid_at,
+            });
+          } else if (isPaid && paidAmount > 0) {
+            paidPayments.push({
+              id: payment.id, month, year,
+              group_id: groupId, group_name: group.name,
+              amount: paidAmount, status: 'partial',
+              paid_at: payment.paid_at,
+            });
+            if (effectivePrice > paidAmount) {
               debts.push({
                 month, year,
                 group_id: groupId, group_name: group.name,
@@ -757,23 +807,25 @@ export class PaymentService {
                 full_amount: effectivePrice, paid_amount: paidAmount,
                 status: 'partial',
               });
-            } else {
-              debts.push({
-                month, year,
-                group_id: groupId, group_name: group.name,
-                amount: effectivePrice, status: 'unpaid',
-              });
             }
           } else {
-            if (totalLessons > 0 && remainingLessons > 0 && monthStart <= now) {
+            if (effectivePrice > 0) {
               debts.push({
-                month, year,
+                id: payment.id, month, year,
                 group_id: groupId, group_name: group.name,
-                amount: effectivePrice,
-                status: 'unpaid',
-                is_auto_generated: true,
+                amount: effectivePrice, status: payment.status || 'unpaid',
               });
             }
+          }
+        } else {
+          if (totalLessons > 0 && monthStart <= now && effectivePrice > 0) {
+            debts.push({
+              month, year,
+              group_id: groupId, group_name: group.name,
+              amount: effectivePrice,
+              status: 'unpaid',
+              is_auto_generated: true,
+            });
           }
         }
 

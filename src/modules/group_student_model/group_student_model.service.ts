@@ -1,8 +1,9 @@
 import { Injectable, NotFoundException, ConflictException,BadRequestException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/sequelize';
-import { GroupStudentModel } from './model';
-import { GroupModel } from 'src/modules/groups';
-import { StudentModel } from 'src/modules/students';
+import { InjectModel, InjectConnection } from '@nestjs/sequelize';
+import { Sequelize } from 'sequelize-typescript';
+import { GroupStudentModel } from './model/group_student_model.entity';
+import { GroupModel } from '../groups/model/group.entity';
+import { StudentModel } from '../students/model/student.entity';
 import { LevelModel } from '../level/model/level.entity';
 import { CreateGroupStudentDto } from './dto';
 import { UpdateGroupStudentDto } from './dto';
@@ -12,12 +13,18 @@ import { ChatRoomModel, ChatRoomType } from '../chat/entities/chat-room.entity';
 
 @Injectable()
 export class GroupStudentService {
+  private get studentModel(): typeof StudentModel {
+    return this.sequelize.model('StudentModel') as typeof StudentModel;
+  }
+
   constructor(
     @InjectModel(GroupStudentModel)
     private readonly groupStudentModel: typeof GroupStudentModel,
 
     @InjectModel(ChatRoomModel)
     private readonly chatRoomModel: typeof ChatRoomModel,
+
+    @InjectConnection() private readonly sequelize: Sequelize,
   ) {}
 
   async create(createGroupStudentDto: CreateGroupStudentDto): Promise<GroupStudentModel> {
@@ -36,6 +43,7 @@ export class GroupStudentService {
         ? new Date(createGroupStudentDto.joined_date)
         : new Date();
       await existingRelation.update({ joined_date: joinedDate, left_date: null });
+      await this.studentModel.update({ group_id: createGroupStudentDto.group_id }, { where: { id: createGroupStudentDto.student_id } });
       return this.findOne(existingRelation.id);
     }
 
@@ -47,6 +55,8 @@ export class GroupStudentService {
       ...createGroupStudentDto,
       joined_date: joinedDate,
     });
+
+    await this.studentModel.update({ group_id: createGroupStudentDto.group_id }, { where: { id: createGroupStudentDto.student_id } });
 
     for (const type of [ChatRoomType.STUDENT, ChatRoomType.PARENT]) {
       await this.chatRoomModel.findOrCreate({
@@ -197,6 +207,7 @@ export class GroupStudentService {
     }
 
     await groupStudent.update({ left_date: new Date() });
+    await this.studentModel.update({ group_id: null }, { where: { id: studentId } });
   }
 
   async bulkAddStudentsToGroup(
@@ -229,6 +240,9 @@ export class GroupStudentService {
         await existing.update({ joined_date: joinDate, left_date: null });
         results.push(existing);
       }
+
+      // Studentning group_id sini ham yangilaymiz
+      await this.studentModel.update({ group_id: groupId }, { where: { id: studentId } });
     }
 
     return results;
@@ -244,6 +258,12 @@ export class GroupStudentService {
           left_date: null,
         },
       },
+    );
+
+    // Studentning group_id sini tozalaymiz
+    await this.studentModel.update(
+      { group_id: null },
+      { where: { id: { [Op.in]: studentIds } } },
     );
   }
 

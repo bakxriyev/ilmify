@@ -22,7 +22,10 @@ import { StudentCoinsModel } from '../../student-coins/entities/student-coin.ent
 import { ParentStudentModel } from '../../parents/entities/parent-student.entity';
 import { EducationCenterModel } from '../../education-centers/entities/education-center.entity';
 
-@Table({ tableName: 'students', timestamps: false })
+@Table({ tableName: 'students', timestamps: false, indexes: [
+  { fields: ['center_id'] },
+  { fields: ['group_id'] },
+] })
 export class StudentModel extends Model<StudentModel> {
   @Column({ type: DataType.BIGINT, autoIncrement: true, primaryKey: true })
   id: number;

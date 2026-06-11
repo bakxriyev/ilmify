@@ -97,33 +97,43 @@ import { AuditLogModel } from './modules/audit/entities/audit-log.entity';
       secret: process.env.JWT_SECRET || 'secret123',
       signOptions: { expiresIn: '1d' },
     }),
-    SequelizeModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: async (config: ConfigService) => {
-        try {
-          return {
-            dialect: 'postgres',
-            host: config.get<string>('databaseConfig.host'),
-            port: config.get<number>('databaseConfig.port'),
-            username: config.get<string>('databaseConfig.user'),
-            password: config.get<string>('databaseConfig.password'),
-            database: config.get<string>('databaseConfig.dbname'),
-            models: [TariffModel, TeacherModel,LevelModel,AdminModel,UserDeviceModel,GroupLessonModel,RedoIncorrectTaskModel, StudentModel,GroupModel,GroupStudentModel,AttendanceModel,UnitModel,ExerciseModel,TaskModel,StudentAnswerModel,ExerciseResultModel,VocabModel,VocabAnswerModel,VocabResultModel,UnitResultModel,StudentCoinsModel,TeacherCoinLogModel,TaskCoinLogModel,ChatRoomModel,ChatMessageModel,MessageStatusModel,ParentModel,ParentStudentModel,RoomModel,PaymentModel,EducationCenterModel,CenterBranchModel,LeadModel,LeadSourceModel,TelegramSettingsModel,TelegramBotModel,TelegramChatModel,TelegramMessageModel,TelegramTemplateModel,TelegramBroadcastModel,AutoNotificationConfigModel,AutoNotificationLogModel,SmsLogModel,SmsTemplateModel,CenterApplicationModel,AuditLogModel],
-            sync: { alter: true },
-            synchronize: true,
-            logging: console.log,
-            autoLoadModels: true,
-          };
-        } catch (error) {
-          console.error(
-            'Error occurred while connecting to the database',
-            error,
-          );
-          throw error;
-        }
-      }
-    }),
+     SequelizeModule.forRootAsync({
+       imports: [ConfigModule],
+       inject: [ConfigService],
+       useFactory: async (config: ConfigService) => {
+         try {
+           const isProd = process.env.NODE_ENV === 'production';
+           return {
+             dialect: 'postgres',
+             host: config.get<string>('databaseConfig.host'),
+             port: config.get<number>('databaseConfig.port'),
+             username: config.get<string>('databaseConfig.user'),
+             password: config.get<string>('databaseConfig.password'),
+             database: config.get<string>('databaseConfig.dbname'),
+             models: [TariffModel, TeacherModel,LevelModel,AdminModel,UserDeviceModel,GroupLessonModel,RedoIncorrectTaskModel, StudentModel,GroupModel,GroupStudentModel,AttendanceModel,UnitModel,ExerciseModel,TaskModel,StudentAnswerModel,ExerciseResultModel,VocabModel,VocabAnswerModel,VocabResultModel,UnitResultModel,StudentCoinsModel,TeacherCoinLogModel,TaskCoinLogModel,ChatRoomModel,ChatMessageModel,MessageStatusModel,ParentModel,ParentStudentModel,RoomModel,PaymentModel,EducationCenterModel,CenterBranchModel,LeadModel,LeadSourceModel,TelegramSettingsModel,TelegramBotModel,TelegramChatModel,TelegramMessageModel,TelegramTemplateModel,TelegramBroadcastModel,AutoNotificationConfigModel,AutoNotificationLogModel,SmsLogModel,SmsTemplateModel,CenterApplicationModel,AuditLogModel],
+             sync: { alter: !isProd },
+             synchronize: !isProd,
+             logging: isProd ? false : console.log,
+             autoLoadModels: true,
+             pool: {
+               max: 20,
+               min: 2,
+               acquire: 30000,
+               idle: 10000,
+             },
+             dialectOptions: isProd ? {
+               ssl: { rejectUnauthorized: false },
+             } : {},
+           };
+         } catch (error) {
+           console.error(
+             'Error occurred while connecting to the database',
+             error,
+           );
+           throw error;
+         }
+       }
+     }),
     ChatModule,
     AdminModule,
     UserDeviceModule,

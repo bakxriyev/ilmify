@@ -74,10 +74,9 @@ async create(createGroupDto: CreateGroupDto, center_id?: number): Promise<GroupM
     if (!level) throw new NotFoundException('Level topilmadi');
   }
 
-  // Guruhni yaratish (room_id dan tashqari, chunki xona darslarga biriktiriladi)
-  const { room_id, ...groupData } = createGroupDto;
+  // Guruhni yaratish (room_id bilan birga)
   const group = await this.groupModel.create({
-    ...groupData,
+    ...createGroupDto,
     center_id: center_id || null,
   } as any);
 
@@ -97,7 +96,7 @@ async create(createGroupDto: CreateGroupDto, center_id?: number): Promise<GroupM
       createGroupDto.duration_months,
       createGroupDto.time,
       createGroupDto.parity,
-      room_id,
+      createGroupDto.room_id,
       createGroupDto.start_time,
       createGroupDto.end_time
     );
@@ -138,21 +137,15 @@ async create(createGroupDto: CreateGroupDto, center_id?: number): Promise<GroupM
       const g = group.toJSON() as any;
       g.student_count = studentCount;
       g.trial_count = trialCount;
-      // Get room from the first lesson with a room assigned
-      if (g.lessons && g.lessons.length > 0) {
-        const lessonWithRoom = g.lessons.find((l: any) => l.room_id);
-        if (lessonWithRoom) {
-          const room = await this.roomModel.findByPk(lessonWithRoom.room_id);
-          if (room) {
-            g.room = {
-              id: room.id,
-              name: room.name,
-              capacity: room.capacity,
-              occupied_seats: studentCount,
-              available_seats: room.capacity - studentCount,
-            };
-          }
-        }
+      // Xonani guruhning o'zidan olamiz (room = BelongsTo relation)
+      if (g.room) {
+        g.room = {
+          id: g.room.id,
+          name: g.room.name,
+          capacity: g.room.capacity,
+          occupied_seats: studentCount,
+          available_seats: g.room.capacity - studentCount,
+        };
       }
       return g;
     }));
@@ -185,24 +178,16 @@ async create(createGroupDto: CreateGroupDto, center_id?: number): Promise<GroupM
     g.student_count = studentCount;
     g.trial_count = trialCount;
 
-    // Get room from the FIRST lesson (since all group lessons use the same room)
-    const lessonsWithRoom = await this.groupLessonModel.findAll({
-      where: { group_id: group.id, room_id: { [Op.ne]: null } },
-      include: [{ model: RoomModel, as: 'room' }],
-      order: [['date', 'ASC']],
-      limit: 1,
-    });
-
-    if (lessonsWithRoom.length > 0 && lessonsWithRoom[0].room) {
-      const room = lessonsWithRoom[0].room;
+    // Xonani guruhning o'zidan olamiz (room = BelongsTo relation)
+    if (g.room) {
       g.room = {
-        id: room.id,
-        name: room.name,
-        capacity: room.capacity,
+        id: g.room.id,
+        name: g.room.name,
+        capacity: g.room.capacity,
         occupied_seats: studentCount,
-        available_seats: room.capacity - studentCount,
+        available_seats: g.room.capacity - studentCount,
       };
-      g.room_id = String(room.id);
+      g.room_id = String(g.room.id);
     }
 
     return g;
@@ -307,11 +292,15 @@ async create(createGroupDto: CreateGroupDto, center_id?: number): Promise<GroupM
       throw new ConflictException('Student allaqachon guruhda');
     }
 
-    return this.groupStudentModel.create({
+    const result = await this.groupStudentModel.create({
       group_id: groupId,
       student_id: studentId,
       joined_date: joined_date ? new Date(joined_date) : new Date(),
     });
+
+    await StudentModel.update({ group_id: groupId }, { where: { id: studentId } });
+
+    return result;
   }
 
   async removeStudentFromGroup(groupId: number, studentId: number): Promise<void> {
@@ -324,6 +313,7 @@ async create(createGroupDto: CreateGroupDto, center_id?: number): Promise<GroupM
     }
 
     await relation.destroy();
+    await StudentModel.update({ group_id: null }, { where: { id: studentId } });
   }
 
   private buildInclude(include?: string) {
@@ -335,6 +325,7 @@ async create(createGroupDto: CreateGroupDto, center_id?: number): Promise<GroupM
         as: 'level',
         attributes: ['id', 'name', 'title', 'description']
       },
+      { model: RoomModel, as: 'room', attributes: ['id', 'name', 'capacity'] },
       {model: GroupLessonModel, as: 'lessons'},
     ];
 
@@ -369,13 +360,18 @@ async create(createGroupDto: CreateGroupDto, center_id?: number): Promise<GroupM
       });
     }
     if (items.some(item => ['lessons', 'groupLessons'].includes(item))) {
-  arr.push({
-    model: GroupLessonModel,
-    as: 'lessons',
-    attributes: ['id', 'date', 'time', 'parity', 'start_time', 'end_time', 'room_id'],
-    order: [['date', 'ASC']],
-  });
-}
+      arr.push({
+        model: GroupLessonModel,
+        as: 'lessons',
+        attributes: ['id', 'date', 'time', 'parity', 'start_time', 'end_time', 'room_id'],
+        include: [{ model: RoomModel, as: 'room', attributes: ['id', 'name', 'capacity'] }],
+        order: [['date', 'ASC']],
+      });
+    }
+
+    if (items.some(item => ['room', 'rooms'].includes(item))) {
+      arr.push({ model: RoomModel, as: 'room', attributes: ['id', 'name', 'capacity'] });
+    }
 
     return arr.length > 0 ? arr : defaultIncludes;
   }
@@ -458,6 +454,13 @@ async createLessons(
 
   if (lessons.length) {
     await this.groupLessonModel.bulkCreate(lessons);
+    // Agar groupda room_id yo'q bo'lsa, birinchi darsning xonasini groupga yozib qo'yamiz
+    if (room_id) {
+      const grp = await this.groupModel.findByPk(groupId);
+      if (grp && !grp.room_id) {
+        await grp.update({ room_id } as any);
+      }
+    }
   }
 
   return lessons;

@@ -9,7 +9,13 @@ export enum PaymentStatus {
   PARTIAL = 'partial',
 }
 
-@Table({ tableName: 'payments', timestamps: true })
+@Table({ tableName: 'payments', timestamps: true, indexes: [
+  { fields: ['student_id', 'month', 'year'] },
+  { fields: ['month', 'year', 'status', 'center_id'] },
+  { fields: ['month', 'year', 'group_id'] },
+  { fields: ['group_id', 'student_id'] },
+  { fields: ['center_id'] },
+] })
 export class PaymentModel extends Model {
   @Column({ type: DataType.BIGINT, autoIncrement: true, primaryKey: true })
   id: number;

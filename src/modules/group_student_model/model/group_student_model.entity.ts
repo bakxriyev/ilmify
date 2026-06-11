@@ -2,7 +2,11 @@ import { Table, Model, Column, DataType, ForeignKey, BelongsTo } from 'sequelize
 import { GroupModel } from 'src/modules/groups';
 import { StudentModel } from 'src/modules/students';
 
-@Table({ tableName: 'group_students', timestamps: false })
+@Table({ tableName: 'group_students', timestamps: false, indexes: [
+  { fields: ['group_id'] },
+  { fields: ['student_id'] },
+  { fields: ['group_id', 'student_id'] },
+] })
 export class GroupStudentModel extends Model {
   @Column({ type: DataType.BIGINT, autoIncrement: true, primaryKey: true })
   id: number;

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { InjectModel } from '@nestjs/sequelize';
+import { InjectModel, InjectConnection } from '@nestjs/sequelize';
 import { Op, Sequelize } from 'sequelize';
+import { QueryTypes } from 'sequelize';
 import { StudentModel } from '../students/model/student.entity';
 import { TeacherModel } from '../teachers/model/teacher.model';
 import { GroupModel } from '../groups/model/group.entity';
@@ -23,6 +24,7 @@ export class DashboardService {
     @InjectModel(GroupLessonModel) private lessonModel: typeof GroupLessonModel,
     @InjectModel(AttendanceModel) private attendanceModel: typeof AttendanceModel,
     @InjectModel(GroupStudentModel) private groupStudentModel: typeof GroupStudentModel,
+    @InjectConnection() private sequelize: Sequelize,
   ) {}
 
   async getStats(center_id?: number) {
@@ -83,22 +85,58 @@ export class DashboardService {
   }
 
   async getStudentGrowth(center_id?: number) {
-    const where: any = {};
-    if (center_id) where.center_id = center_id;
-    const total = await this.studentModel.count({ where });
     const now = new Date();
+
+    let result: any[];
+    if (center_id) {
+      result = await this.sequelize.query(`
+        SELECT
+          DATE_TRUNC('month', "createdAt") as month,
+          COUNT(*)::int as count
+        FROM "students"
+        WHERE "center_id" = $1 AND "createdAt" >= $2
+        GROUP BY DATE_TRUNC('month', "createdAt")
+        ORDER BY month
+      `, {
+        bind: [center_id, new Date(now.getFullYear() - 1, now.getMonth(), 1)],
+        type: QueryTypes.SELECT,
+      });
+    } else {
+      result = await this.sequelize.query(`
+        SELECT
+          DATE_TRUNC('month', "createdAt") as month,
+          COUNT(*)::int as count
+        FROM "students"
+        WHERE "createdAt" >= $1
+        GROUP BY DATE_TRUNC('month', "createdAt")
+        ORDER BY month
+      `, {
+        bind: [new Date(now.getFullYear() - 1, now.getMonth(), 1)],
+        type: QueryTypes.SELECT,
+      });
+    }
+
+    const monthCounts = new Map<string, number>();
+    for (const row of result as any[]) {
+      const d = new Date(row.month);
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      monthCounts.set(key, row.count);
+    }
+
     const months = ['Yan', 'Fev', 'Mar', 'Apr', 'May', 'Iyun', 'Iyul', 'Avg', 'Sen', 'Okt', 'Noy', 'Dek'];
     const labels: string[] = [];
     const newData: number[] = [];
     const cumulativeData: number[] = [];
-
-    const perMonth = Math.max(1, Math.floor(total / 12));
+    let cumulative = 0;
 
     for (let i = 11; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
       labels.push(months[d.getMonth()]);
-      newData.push(perMonth);
-      cumulativeData.push(perMonth * (12 - i));
+      const count = monthCounts.get(key) || 0;
+      newData.push(count);
+      cumulative += count;
+      cumulativeData.push(cumulative);
     }
 
     return {
@@ -113,18 +151,32 @@ export class DashboardService {
   async getGroupDistribution(center_id?: number) {
     const where: any = {};
     if (center_id) where.center_id = center_id;
+
     const groups = await this.groupModel.findAll({
       where,
       include: [{ model: LevelModel, as: 'level' }],
     });
+
+    const groupIds = groups.map(g => g.id);
+    const studentCounts = new Map<number, number>();
+    if (groupIds.length > 0) {
+      const counts = await this.groupStudentModel.findAll({
+        attributes: ['group_id', [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']],
+        where: { group_id: groupIds },
+        group: ['group_id'],
+        raw: true,
+      }) as any[];
+      for (const row of counts) {
+        studentCounts.set(Number(row.group_id), Number(row.count));
+      }
+    }
 
     const levelMap: Record<string, { count: number; students: number }> = {};
     for (const g of groups) {
       const levelName = g.level?.name || 'Nomsiz';
       if (!levelMap[levelName]) levelMap[levelName] = { count: 0, students: 0 };
       levelMap[levelName].count += 1;
-      const studentCount = await this.groupStudentModel.count({ where: { group_id: g.id } });
-      levelMap[levelName].students += studentCount;
+      levelMap[levelName].students += studentCounts.get(Number(g.id)) || 0;
     }
 
     return {
@@ -167,58 +219,95 @@ export class DashboardService {
   async getTopTeachersByStudents(limit = 5, center_id?: number) {
     const where: any = {};
     if (center_id) where.center_id = center_id;
-    const teachers = await this.teacherModel.findAll({
-      where,
-      include: [
-        { model: GroupModel, as: 'mainGroups' },
-        { model: GroupModel, as: 'supportGroups' },
-      ],
-    });
 
-    const result: any[] = [];
-    for (const t of teachers) {
+    const [teachers, studentCounts] = await Promise.all([
+      this.teacherModel.findAll({
+        where,
+        include: [
+          { model: GroupModel, as: 'mainGroups' },
+          { model: GroupModel, as: 'supportGroups' },
+        ],
+      }),
+      this.groupStudentModel.findAll({
+        attributes: ['group_id', [Sequelize.fn('COUNT', Sequelize.col('id')), 'count']],
+        group: ['group_id'],
+        raw: true,
+      }) as Promise<any[]>,
+    ]);
+
+    const groupStudentMap = new Map<number, number>();
+    for (const row of studentCounts) {
+      groupStudentMap.set(Number(row.group_id), Number(row.count));
+    }
+
+    const result = teachers.map((t) => {
       const allGroups = [...(t.mainGroups || []), ...(t.supportGroups || [])];
       let totalStudents = 0;
       for (const g of allGroups) {
-        const cnt = await this.groupStudentModel.count({ where: { group_id: g.id } });
-        totalStudents += cnt;
+        totalStudents += groupStudentMap.get(Number(g.id)) || 0;
       }
-      result.push({
+      return {
         id: t.id,
         first_name: t.first_name,
         last_name: t.last_name,
         gmail: t.gmail,
         total_students: totalStudents,
         total_groups: allGroups.length,
-      });
-    }
+      };
+    });
 
     return result.sort((a, b) => b.total_students - a.total_students).slice(0, limit);
   }
 
   async getBestAttendanceStudents(limit = 10, center_id?: number) {
-    const where: any = {};
-    if (center_id) where.center_id = center_id;
-    const students = await this.studentModel.findAll({ where, limit: 200 });
+    const studentWhere: any = {};
+    if (center_id) studentWhere.center_id = center_id;
+    const students = await this.studentModel.findAll({
+      where: studentWhere,
+      attributes: ['id', 'first_name', 'last_name'],
+      limit: 200,
+    });
 
-    const result: any[] = [];
-    for (const s of students) {
-      const total = await this.attendanceModel.count({ where: { student_id: Number(s.id) } });
-      if (total === 0) continue;
-      const present = await this.attendanceModel.count({ where: { student_id: Number(s.id), is_present: true } });
-      result.push({
-        id: s.id,
-        first_name: s.first_name,
-        last_name: s.last_name,
-        group_name: "Guruhsiz",
-        total_attendance: total,
-        present,
-        absent: total - present,
-        attendance_rate: Math.round((present / total) * 100),
-      });
-    }
+    if (students.length === 0) return [];
 
-    return result.sort((a, b) => b.attendance_rate - a.attendance_rate).slice(0, limit);
+    const studentIds = students.map(s => s.id);
+    const sIdMap = new Map<number, typeof students[0]>();
+    for (const s of students) sIdMap.set(Number(s.id), s);
+
+    const attendanceRows = await this.attendanceModel.findAll({
+      attributes: [
+        'student_id',
+        [Sequelize.fn('COUNT', Sequelize.col('id')), 'total'],
+        [Sequelize.fn('SUM', Sequelize.literal('CASE WHEN is_present THEN 1 ELSE 0 END')), 'present'],
+      ],
+      where: { student_id: studentIds },
+      group: ['student_id'],
+      raw: true,
+    }) as any[];
+
+    const result = attendanceRows
+      .map((row: any) => {
+        const sid = Number(row.student_id);
+        const s = sIdMap.get(sid);
+        if (!s) return null;
+        const total = Number(row.total);
+        const present = Number(row.present);
+        return {
+          id: sid,
+          first_name: s.first_name,
+          last_name: s.last_name,
+          group_name: "Guruhsiz",
+          total_attendance: total,
+          present,
+          absent: total - present,
+          attendance_rate: total > 0 ? Math.round((present / total) * 100) : 0,
+        };
+      })
+      .filter(Boolean)
+      .sort((a: any, b: any) => b.attendance_rate - a.attendance_rate)
+      .slice(0, limit);
+
+    return result;
   }
 
   async getMonthlyAttendance(center_id?: number) {
@@ -234,30 +323,56 @@ export class DashboardService {
       allGroupIds = groups.map(g => g.id);
     }
 
+    const twelveMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 11, 1);
+
+    let monthAttendance: any[];
+    if (allGroupIds.length > 0) {
+      monthAttendance = await this.sequelize.query(`
+        SELECT
+          DATE_TRUNC('month', "date") as month,
+          is_present,
+          COUNT(*)::int as count
+        FROM "attendances"
+        WHERE "date" >= $1 AND "group_id" = ANY($2::int[])
+        GROUP BY DATE_TRUNC('month', "date"), is_present
+        ORDER BY month
+      `, {
+        bind: [twelveMonthsAgo, allGroupIds],
+        type: QueryTypes.SELECT,
+      });
+    } else {
+      monthAttendance = await this.sequelize.query(`
+        SELECT
+          DATE_TRUNC('month', "date") as month,
+          is_present,
+          COUNT(*)::int as count
+        FROM "attendances"
+        WHERE "date" >= $1
+        GROUP BY DATE_TRUNC('month', "date"), is_present
+        ORDER BY month
+      `, {
+        bind: [twelveMonthsAgo],
+        type: QueryTypes.SELECT,
+      });
+    }
+
+    const monthData = new Map<string, { present: number; absent: number }>();
+    for (const row of monthAttendance as any[]) {
+      const d = new Date(row.month);
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      if (!monthData.has(key)) monthData.set(key, { present: 0, absent: 0 });
+      const data = monthData.get(key)!;
+      if (row.is_present) data.present = row.count;
+      else data.absent = row.count;
+    }
+
     for (let i = 11; i >= 0; i--) {
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
       labels.push(months[d.getMonth()]);
-
-      const attendanceWhere: any = {
-        date: { [Op.gte]: d.toISOString().split('T')[0], [Op.lt]: monthEnd.toISOString().split('T')[0] },
-      };
-
-      if (allGroupIds.length) {
-        attendanceWhere.group_id = allGroupIds;
-      }
-
-      const [present, absent] = await Promise.all([
-        this.attendanceModel.count({
-          where: { ...attendanceWhere, is_present: true },
-        }),
-        this.attendanceModel.count({
-          where: { ...attendanceWhere, is_present: false },
-        }),
-      ]);
-
-      presentData.push(present);
-      absentData.push(absent);
+      const data = monthData.get(key) || { present: 0, absent: 0 };
+      presentData.push(data.present);
+      absentData.push(data.absent);
     }
 
     return {

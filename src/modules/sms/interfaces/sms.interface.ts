@@ -12,6 +12,17 @@ export enum SmsTemplateCategory {
   EXAM_RESULT = 'exam_result',
   ATTENDANCE = 'attendance',
   GENERAL = 'general',
+  LOGIN_CREDENTIALS = 'login_credentials',
+  DEBT_REMINDER = 'debt_reminder',
+}
+
+export enum RecipientType {
+  SINGLE_STUDENT = 'single_student',
+  ALL_STUDENTS = 'all_students',
+  SINGLE_TEACHER = 'single_teacher',
+  ALL_TEACHERS = 'all_teachers',
+  GROUP_STUDENTS = 'group_students',
+  SELECTED_STUDENTS = 'selected_students',
 }
 
 export interface SmsTemplate {

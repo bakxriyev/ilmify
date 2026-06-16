@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsNumber } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsString, IsOptional, IsNumber, IsArray } from 'class-validator';
 
 export class SendSmsDto {
   @ApiProperty({ description: 'Telefon raqam (+998901234567)' })
@@ -18,11 +19,13 @@ export class SendSmsDto {
   @ApiPropertyOptional({ description: 'Markaz ID' })
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   center_id?: number;
 
   @ApiPropertyOptional({ description: 'Kim yuborgan (admin ID)' })
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   created_by?: number;
 }
 
@@ -33,11 +36,13 @@ export class SendBulkSmsDto {
   @ApiPropertyOptional({ description: 'Markaz ID' })
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   center_id?: number;
 
   @ApiPropertyOptional({ description: 'Kim yuborgan' })
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   created_by?: number;
 }
 
@@ -49,6 +54,7 @@ export class SendOtpDto {
   @ApiPropertyOptional({ description: 'Markaz ID' })
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   center_id?: number;
 }
 
@@ -87,6 +93,173 @@ export class SmsReportQueryDto {
   limit?: number;
 }
 
+export class SendToStudentDto {
+  @ApiProperty({ description: 'Student ID' })
+  @IsNumber()
+  @Type(() => Number)
+  student_id: number;
+
+  @ApiProperty({ description: 'Shablon matni yoki kategoriyasi (login_credentials, debt_reminder yoki custom text)' })
+  @IsString()
+  template_or_message: string;
+
+  @ApiPropertyOptional({ description: 'Shablon o\'zgaruvchilari' })
+  @IsOptional()
+  variables?: Record<string, string>;
+
+  @ApiPropertyOptional({ description: 'Markaz ID' })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  center_id?: number;
+
+  @ApiPropertyOptional({ description: 'Kim yuborgan' })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  created_by?: number;
+}
+
+export class SendToAllStudentsDto {
+  @ApiProperty({ description: 'Shablon matni yoki kategoriyasi' })
+  @IsString()
+  template_or_message: string;
+
+  @ApiPropertyOptional({ description: 'Shablon o\'zgaruvchilari' })
+  @IsOptional()
+  variables?: Record<string, string>;
+
+  @ApiPropertyOptional({ description: 'Markaz ID' })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  center_id?: number;
+
+  @ApiPropertyOptional({ description: 'Kim yuborgan' })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  created_by?: number;
+}
+
+export class SendToTeacherDto {
+  @ApiProperty({ description: "O'qituvchi ID" })
+  @IsNumber()
+  @Type(() => Number)
+  teacher_id: number;
+
+  @ApiProperty({ description: 'SMS matni' })
+  @IsString()
+  message: string;
+
+  @ApiPropertyOptional({ description: 'Markaz ID' })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  center_id?: number;
+
+  @ApiPropertyOptional({ description: 'Kim yuborgan' })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  created_by?: number;
+}
+
+export class SendToAllTeachersDto {
+  @ApiProperty({ description: 'SMS matni' })
+  @IsString()
+  message: string;
+
+  @ApiPropertyOptional({ description: 'Markaz ID' })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  center_id?: number;
+
+  @ApiPropertyOptional({ description: 'Kim yuborgan' })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  created_by?: number;
+}
+
+export class SendToGroupStudentsDto {
+  @ApiProperty({ description: 'Guruh ID' })
+  @IsNumber()
+  @Type(() => Number)
+  group_id: number;
+
+  @ApiProperty({ description: 'Shablon matni yoki kategoriyasi' })
+  @IsString()
+  template_or_message: string;
+
+  @ApiPropertyOptional({ description: 'Shablon o\'zgaruvchilari' })
+  @IsOptional()
+  variables?: Record<string, string>;
+
+  @ApiPropertyOptional({ description: 'Markaz ID' })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  center_id?: number;
+
+  @ApiPropertyOptional({ description: 'Kim yuborgan' })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  created_by?: number;
+}
+
+export class SendToSelectedStudentsDto {
+  @ApiProperty({ description: 'Student ID lar ro\'yxati' })
+  @IsArray()
+  student_ids: number[];
+
+  @ApiProperty({ description: 'Shablon matni yoki kategoriyasi' })
+  @IsString()
+  template_or_message: string;
+
+  @ApiPropertyOptional({ description: 'Shablon o\'zgaruvchilari' })
+  @IsOptional()
+  variables?: Record<string, string>;
+
+  @ApiPropertyOptional({ description: 'Markaz ID' })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  center_id?: number;
+
+  @ApiPropertyOptional({ description: 'Kim yuborgan' })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  created_by?: number;
+}
+
+export class SendCredentialsDto {
+  @ApiProperty({ description: 'Student ID' })
+  @IsNumber()
+  @Type(() => Number)
+  student_id: number;
+
+  @ApiPropertyOptional({ description: 'Bot havolasi (ixtiyoriy)' })
+  @IsOptional()
+  @IsString()
+  bot_link?: string;
+
+  @ApiPropertyOptional({ description: 'Markaz ID' })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  center_id?: number;
+
+  @ApiPropertyOptional({ description: 'Kim yuborgan' })
+  @IsOptional()
+  @IsNumber()
+  @Type(() => Number)
+  created_by?: number;
+}
+
 export class CreateSmsTemplateDto {
   @ApiProperty({ description: 'Kategoriya' })
   @IsString()
@@ -107,6 +280,7 @@ export class CreateSmsTemplateDto {
   @ApiPropertyOptional({ description: 'Markaz ID' })
   @IsOptional()
   @IsNumber()
+  @Type(() => Number)
   center_id?: number;
 }
 

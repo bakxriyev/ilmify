@@ -4,6 +4,7 @@ import { InjectModel } from '@nestjs/sequelize';
 import { Op } from 'sequelize';
 import { PaymentService } from './payment.service';
 import { NotificationService } from '../notification/notification.service';
+import { AuditService } from '../audit/audit.service';
 import { GroupModel } from '../groups/model/group.entity';
 import { EducationCenterModel } from '../education-centers/entities/education-center.entity';
 
@@ -14,6 +15,7 @@ export class PaymentCronService {
   constructor(
     private paymentService: PaymentService,
     private notificationService: NotificationService,
+    private auditService: AuditService,
     @InjectModel(GroupModel) private groupModel: typeof GroupModel,
     @InjectModel(EducationCenterModel) private centerModel: typeof EducationCenterModel,
   ) {}
@@ -24,6 +26,15 @@ export class PaymentCronService {
     try {
       const genResult = await this.paymentService.autoGenerateMonthlyPayments();
       this.logger.log(`Auto-generated ${genResult.created} unpaid payments for ${genResult.month}/${genResult.year}`);
+      this.auditService.log({
+        action: 'auto_generate',
+        entity_type: 'payment',
+        entity_id: '',
+        entity_name: `${genResult.month}/${genResult.year}`,
+        description: `${genResult.created} ta to'lov avtomatik yaratildi (${genResult.month}/${genResult.year})`,
+        admin_id: 0,
+        admin_name: 'Cron',
+      });
     } catch (err) {
       this.logger.error('Auto-generation failed:', err);
     }
@@ -41,6 +52,15 @@ export class PaymentCronService {
       const globalResult = await this.notificationService.sendDailyPaymentReminders();
       totalSent += globalResult.sent;
       this.logger.log(`Sent ${totalSent} payment reminders with templates`);
+      this.auditService.log({
+        action: 'auto_remind',
+        entity_type: 'payment',
+        entity_id: '',
+        entity_name: '',
+        description: `${totalSent} ta to'lov eslatmasi jo'natildi`,
+        admin_id: 0,
+        admin_name: 'Cron',
+      });
     } catch (err) {
       this.logger.error('Payment reminders failed:', err);
     }
@@ -61,6 +81,15 @@ export class PaymentCronService {
         } catch {}
       }
       this.logger.log(`Sent ${totalSent} lesson-based reminders`);
+      this.auditService.log({
+        action: 'auto_remind',
+        entity_type: 'payment',
+        entity_id: '',
+        entity_name: '',
+        description: `${totalSent} ta dars asosidagi to'lov eslatmasi jo'natildi`,
+        admin_id: 0,
+        admin_name: 'Cron',
+      });
     } catch (err) {
       this.logger.error('Lesson reminders failed:', err);
     }

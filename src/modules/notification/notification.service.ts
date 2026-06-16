@@ -92,7 +92,7 @@ export class NotificationService {
           first_name: s.first_name,
           last_name: s.last_name,
           group_name: group?.name || '',
-          summa: Math.floor(debt).toLocaleString(),
+          summa: String(Math.floor(debt)),
           oy: MONTH_NAMES_UZ[month] || `${month}`,
         });
       }
@@ -430,7 +430,7 @@ export class NotificationService {
         first_name: student.first_name,
         last_name: student.last_name,
         group_name: group?.name || '',
-        summa: Math.floor(debt).toLocaleString(),
+        summa: String(Math.floor(debt)),
         oy: MONTH_NAMES_UZ[month] || `${month}`,
       };
 

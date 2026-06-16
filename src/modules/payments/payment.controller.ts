@@ -13,7 +13,8 @@ export class PaymentController {
   @Post()
   @ApiOperation({ summary: 'Yangi to\'lov yaratish' })
   create(@Body() dto: CreatePaymentDto, @Req() req?: any) {
-    return this.service.create({ ...dto, center_id: req?.center_id } as any);
+    const user = req?.user;
+    return this.service.create({ ...dto, center_id: req?.center_id } as any, user);
   }
 
   @Get()
@@ -115,14 +116,16 @@ export class PaymentController {
 
   @Patch(':id')
   @ApiOperation({ summary: "To'lovni yangilash" })
-  update(@Param('id') id: string, @Body() dto: UpdatePaymentDto) {
-    return this.service.update(Number(id), dto);
+  update(@Param('id') id: string, @Body() dto: UpdatePaymentDto, @Req() req?: any) {
+    const user = req?.user;
+    return this.service.update(Number(id), dto, user);
   }
 
   @Delete(':id')
   @ApiOperation({ summary: "To'lovni o'chirish" })
-  remove(@Param('id') id: string) {
-    return this.service.remove(Number(id));
+  remove(@Param('id') id: string, @Req() req?: any) {
+    const user = req?.user;
+    return this.service.remove(Number(id), user);
   }
 
   @Post('check-reminders')

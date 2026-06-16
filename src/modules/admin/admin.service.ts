@@ -6,6 +6,7 @@ import * as crypto from 'crypto';
 import { AdminModel, AdminRole } from './model/admin.entity';
 import { EducationCenterModel } from '../education-centers/entities/education-center.entity';
 import { EducationCenterService } from '../education-centers/education-center.service';
+import { AuditService } from '../audit/audit.service';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { UpdateAdminDto } from './dto/update-admin.dto';
 import { PhoneLoginDto } from './dto/login-admin.dto';
@@ -19,6 +20,7 @@ export class AdminService {
     private adminModel: typeof AdminModel,
     private jwtService: JwtService,
     private educationCenterService: EducationCenterService,
+    private auditService: AuditService,
   ) {}
 
   // Barcha adminlarni olish
@@ -82,7 +84,7 @@ export class AdminService {
 
     const access_token = this.jwtService.sign(payload, {
       secret: process.env.JWT_SECRET || 'your-secret-key',
-      expiresIn: '15m',
+      expiresIn: '7d',
     });
 
     const refresh_token = crypto.randomBytes(40).toString('hex');
@@ -295,6 +297,17 @@ export class AdminService {
     const effectivePermissions = effectiveRole === AdminRole.DIRECTOR
       ? null
       : this.parsePermissions(adminWithoutPassword.permissions);
+
+    // Audit log: tizimga kirish
+    this.auditService.log({
+      admin_id: admin.id,
+      admin_name: admin.full_name,
+      action: 'login',
+      entity_type: 'admin',
+      entity_name: admin.full_name,
+      description: `${admin.full_name} tizimga kirdi (${effectiveRole})`,
+      center_id: admin.center_id || undefined,
+    });
 
     return {
       message: 'Login successful',

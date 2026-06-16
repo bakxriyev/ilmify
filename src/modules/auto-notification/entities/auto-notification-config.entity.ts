@@ -20,6 +20,12 @@ export class AutoNotificationConfigModel extends Model<AutoNotificationConfigMod
   @Column({ type: DataType.BOOLEAN, allowNull: false, defaultValue: true })
   send_telegram: boolean;
 
+  @Column({ type: DataType.BOOLEAN, allowNull: false, defaultValue: false })
+  send_sms: boolean;
+
+  @Column({ type: DataType.STRING, allowNull: true })
+  sms_template_category: string;
+
   @Column({ type: DataType.STRING, allowNull: false, defaultValue: 'Asia/Tashkent' })
   timezone: string;
 }

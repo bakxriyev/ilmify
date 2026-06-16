@@ -33,6 +33,18 @@ export class SmsLogModel extends Model {
   @Column({ type: DataType.BIGINT, allowNull: true })
   center_id: number;
 
+  @Column({ type: DataType.STRING(30), allowNull: true })
+  recipient_type: string;
+
+  @Column({ type: DataType.BIGINT, allowNull: true })
+  recipient_id: number;
+
+  @Column({ type: DataType.STRING(200), allowNull: true })
+  recipient_name: string;
+
+  @Column({ type: DataType.STRING(50), allowNull: true })
+  template_category: string;
+
   @CreatedAt
   created_at: Date;
 }

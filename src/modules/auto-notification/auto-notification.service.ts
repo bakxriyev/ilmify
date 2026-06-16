@@ -7,8 +7,11 @@ import { AutoNotificationLogModel } from './entities/auto-notification-log.entit
 import { BotManagerService } from '../telegram-bot/bot-manager.service';
 import { NotificationService } from '../notification/notification.service';
 import { PaymentService } from '../payments/payment.service';
+import { SmsService } from '../sms/sms.service';
+import { AuditService } from '../audit/audit.service';
 import { StudentModel } from '../students/model/student.entity';
 import { GroupModel } from '../groups/model/group.entity';
+import { EducationCenterModel } from '../education-centers/entities/education-center.entity';
 import { TelegramChatModel } from '../telegram-bot/entities/telegram-chat.entity';
 
 @Injectable()
@@ -26,9 +29,13 @@ export class AutoNotificationService {
     private chatModel: typeof TelegramChatModel,
     @InjectModel(GroupModel)
     private groupModel: typeof GroupModel,
+    @InjectModel(EducationCenterModel)
+    private educationCenterModel: typeof EducationCenterModel,
     private botManager: BotManagerService,
     private notificationService: NotificationService,
     private paymentService: PaymentService,
+    private smsService: SmsService,
+    private auditService: AuditService,
   ) {}
 
   @Cron('* * * * *', { timeZone: 'Asia/Tashkent' })
@@ -151,10 +158,15 @@ export class AutoNotificationService {
     let sentCount = 0;
     let failedCount = 0;
     let noTelegramCount = 0;
+    let smsSentCount = 0;
+    let smsFailedCount = 0;
+
+    const centerName = await this.getCenterName(centerId);
+    const nowMonth = this.getMonthNameUzbek(now.getMonth() + 1);
 
     for (const entry of filteredEntries) {
       const sid = entry.student.id;
-      const summa = Math.floor(entry.debt).toLocaleString();
+      const summa = String(Math.floor(entry.debt));
       const messageText = this.replacePlaceholders(template, entry.student, entry.group.name, summa);
 
       const chat = await this.chatModel.findOne({
@@ -186,6 +198,25 @@ export class AutoNotificationService {
         noTelegramCount++;
       }
 
+      // SMS jo'natish (agar yoqilgan bo'lsa)
+      let smsSent = false;
+      if (config.send_sms && entry.student.phone_number) {
+        try {
+          const smsVars: Record<string, string> = {
+            oy: nowMonth,
+            summa: summa,
+            markaz: centerName,
+          };
+          const smsCategory = config.sms_template_category || 'debt_reminder';
+          await this.smsService.sendToStudent(sid, smsCategory, smsVars, centerId);
+          smsSent = true;
+          smsSentCount++;
+        } catch (e) {
+          this.logger.warn(`Center ${centerId}, student ${sid}: SMS yuborishda xatolik: ${e.message}`);
+          smsFailedCount++;
+        }
+      }
+
       try {
         await this.notificationService.send({
           student_id: sid,
@@ -207,12 +238,35 @@ export class AutoNotificationService {
         telegram_chat_id: chat ? chat.chat_id : null,
         telegram_sent: telegramSent,
         telegram_error: telegramError,
-        delivered: telegramSent,
+        delivered: telegramSent || smsSent,
         message_text: messageText,
+        sms_sent: smsSent,
       });
     }
 
-    this.logger.log(`[DONE] Center ${centerId}: Sent=${sentCount}, Failed=${failedCount}, NoTelegram=${noTelegramCount}`);
+    this.logger.log(`[DONE] Center ${centerId}: Telegram Sent=${sentCount}, Failed=${failedCount}, NoTelegram=${noTelegramCount}, SMS Sent=${smsSentCount}, SMS Failed=${smsFailedCount}`);
+
+    this.auditService.log({
+      action: 'auto_send',
+      entity_type: 'auto_notification',
+      entity_id: '',
+      entity_name: `Center ${centerId}`,
+      description: `${sentCount} tg/${smsSentCount} sms — ${filteredEntries.length} ta studentga eslatma jo'natildi`,
+      admin_id: 0,
+      admin_name: 'Cron',
+      center_id: centerId,
+    });
+  }
+
+  private async getCenterName(centerId?: number): Promise<string> {
+    if (!centerId) return '';
+    const center = await this.educationCenterModel.findByPk(centerId, { attributes: ['name'] });
+    return center ? center.name.trim() : '';
+  }
+
+  private getMonthNameUzbek(month: number): string {
+    const months = ['', 'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'];
+    return months[month] || '';
   }
 
   private replacePlaceholders(template: string, student: any, groupName = '', summa = ''): string {
@@ -234,6 +288,8 @@ export class AutoNotificationService {
         send_times: JSON.stringify(['09:00', '14:00', '20:00']),
         message_template: 'Assalomu alaykum, {ism}! Sizning to\'lovingiz muddati o\'tgan. Iltimos, o\'quv markaziga murojaat qiling.',
         send_telegram: true,
+        send_sms: false,
+        sms_template_category: 'debt_reminder',
         timezone: 'Asia/Tashkent',
       });
     }

@@ -1,59 +1,51 @@
-import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, Logger, HttpException, HttpStatus, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { ConfigService } from '@nestjs/config';
 import { Op } from 'sequelize';
 import { SmsLogModel } from './entities/sms-log.entity';
 import { SmsTemplateModel } from './entities/sms-template.entity';
-import { SmsStatus, SmsTemplate, SmsTemplateCategory, OtpEntry } from './interfaces/sms.interface';
+import { SmsStatus, SmsTemplate, SmsTemplateCategory, RecipientType, OtpEntry } from './interfaces/sms.interface';
+import { AuditService } from '../audit/audit.service';
+import { StudentModel } from '../students/model/student.entity';
+import { TeacherModel } from '../teachers/model/teacher.model';
+import { GroupModel } from '../groups/model/group.entity';
+import { EducationCenterModel } from '../education-centers/entities/education-center.entity';
 
+// Eskizda tasdiqlangan shablonlar
 const DEFAULT_TEMPLATES: SmsTemplate[] = [
+  {
+    id: 'login_credentials',
+    category: SmsTemplateCategory.LOGIN_CREDENTIALS,
+    title: 'Kirish ma\'lumotlari',
+    body: 'Hurmatli {ism} {familiya}! {markaz} tizimiga kirish ma\'lumotlarinigz: Raqamingiz: {login} Parolingiz: {password} {bot}',
+    variables: ['ism', 'familiya', 'markaz', 'login', 'password', 'bot'],
+  },
+  {
+    id: 'debt_reminder',
+    category: SmsTemplateCategory.DEBT_REMINDER,
+    title: 'Qarzdorlik eslatmasi',
+    body: 'Hurmatli {ism} {familiya}! {markaz} o\'quv markazi uchun {oy} oyi bo\'yicha {summa} so\'m qarzdorligingiz mavjud. To\'lovni o\'z vaqtida amalga oshiring.',
+    variables: ['ism', 'familiya', 'markaz', 'oy', 'summa'],
+  },
   {
     id: 'payment_reminder',
     category: SmsTemplateCategory.PAYMENT_REMINDER,
     title: 'To\'lov eslatmasi',
-    body: 'Hurmatli {studentName}! {groupName} guruhida {amount} so\'m to\'lovingiz {dueDate} gacha to\'lanishi kerak. Iltimos, o\'z vaqtida to\'lang. O\'quv markaz: {centerName}',
-    variables: ['studentName', 'groupName', 'amount', 'dueDate', 'centerName'],
-  },
-  {
-    id: 'lesson_start',
-    category: SmsTemplateCategory.LESSON_START,
-    title: 'Dars boshlanishi',
-    body: 'Assalomu alaykum, {studentName}! Bugun soat {time} da {subject} darsi boshlanadi. Xona: {room}. O\'qituvchi: {teacherName}',
-    variables: ['studentName', 'time', 'subject', 'room', 'teacherName'],
-  },
-  {
-    id: 'group_acceptance',
-    category: SmsTemplateCategory.GROUP_ACCEPTANCE,
-    title: 'Guruhga qabul',
-    body: 'Tabriklaymiz, {studentName}! Siz {groupName} guruhiga qabul qilindingiz. Darslar {startDate} dan boshlanadi. Batafsil: {phone}',
-    variables: ['studentName', 'groupName', 'startDate', 'phone'],
-  },
-  {
-    id: 'exam_result',
-    category: SmsTemplateCategory.EXAM_RESULT,
-    title: 'Imtihon natijasi',
-    body: 'Hurmatli {studentName}! {subjectName} imtihonidan {score} ball oldingiz. Baho: {grade}. O\'quv markaz: {centerName}',
-    variables: ['studentName', 'subjectName', 'score', 'grade', 'centerName'],
-  },
-  {
-    id: 'attendance',
-    category: SmsTemplateCategory.ATTENDANCE,
-    title: 'Davomatga chaqiruv',
-    body: 'Hurmatli {studentName}! Bugun {date} darsga kelmadingiz. Sababi noma\'lum. Iltimos, administrator bilan bog\'laning: {phone}',
-    variables: ['studentName', 'date', 'phone'],
+    body: 'Hurmatli {ism} {familiya}! {markaz} o\'quv markazi uchun {oy} oyi bo\'yicha {summa} so\'m qarzdorligingiz mavjud. To\'lovni o\'z vaqtida amalga oshiring.',
+    variables: ['ism', 'familiya', 'markaz', 'oy', 'summa'],
   },
   {
     id: 'general',
     category: SmsTemplateCategory.GENERAL,
     title: 'Yangilik',
-    body: 'O\'quv markaz: {message}',
-    variables: ['message'],
+    body: 'Hurmatli {ism} {familiya}! {message}',
+    variables: ['ism', 'familiya', 'message'],
   },
 ];
 
 @Injectable()
-export class SmsService {
+export class SmsService implements OnModuleInit {
   private readonly logger = new Logger(SmsService.name);
   private eskizToken: string | null = null;
   private tokenExpiry: Date | null = null;
@@ -64,8 +56,23 @@ export class SmsService {
     private smsLogModel: typeof SmsLogModel,
     @InjectModel(SmsTemplateModel)
     private smsTemplateModel: typeof SmsTemplateModel,
+    @InjectModel(StudentModel)
+    private studentModel: typeof StudentModel,
+    @InjectModel(TeacherModel)
+    private teacherModel: typeof TeacherModel,
+    @InjectModel(GroupModel)
+    private groupModel: typeof GroupModel,
+    @InjectModel(EducationCenterModel)
+    private educationCenterModel: typeof EducationCenterModel,
     private configService: ConfigService,
+    private auditService: AuditService,
   ) {}
+
+  async onModuleInit() {
+    // Template registration is available via POST /sms/templates/register-eskiz
+    // Register templates manually on my.eskiz.uz -> SMS -> Мои тексты
+    this.logger.log('SmsService initialized');
+  }
 
   // ─── Token Management ────────────────────────────────────
 
@@ -170,6 +177,32 @@ export class SmsService {
     } catch {
       return false;
     }
+  }
+
+  // ─── Eskiz Template Registration ─────────────────────────
+
+  async registerEskizTemplate(templateText: string): Promise<any> {
+    try {
+      const res = await this.fetchEskiz('POST', '/user/template', { template: templateText });
+      this.logger.log(`Eskiz template registered: "${templateText.substring(0, 40)}..."`);
+      return res;
+    } catch (err: any) {
+      this.logger.warn(`Eskiz template register failed for "${templateText.substring(0, 30)}...": ${err.message}`);
+      throw err;
+    }
+  }
+
+  async registerDefaultTemplatesWithEskiz(): Promise<{ success: string[]; failed: { text: string; error: string }[] }> {
+    const result: { success: string[]; failed: { text: string; error: string }[] } = { success: [], failed: [] };
+    for (const tmpl of DEFAULT_TEMPLATES) {
+      try {
+        await this.registerEskizTemplate(tmpl.body);
+        result.success.push(tmpl.id);
+      } catch (err: any) {
+        result.failed.push({ text: tmpl.id, error: err.message });
+      }
+    }
+    return result;
   }
 
   // ─── SMS Send ────────────────────────────────────────────
@@ -340,6 +373,426 @@ export class SmsService {
     return result;
   }
 
+  async resolveTemplate(templateOrMessage: string, variables: Record<string, string>): Promise<string> {
+    const defaultTemplate = DEFAULT_TEMPLATES.find(t => t.id === templateOrMessage || t.category === templateOrMessage);
+    if (defaultTemplate) {
+      return this.replaceTemplateVariables(defaultTemplate.body, variables);
+    }
+    const customTemplate = await this.smsTemplateModel.findOne({
+      where: {
+        [Op.or]: [
+          { category: templateOrMessage },
+          { title: templateOrMessage },
+        ],
+      },
+    });
+    if (customTemplate) {
+      return this.replaceTemplateVariables(customTemplate.body, variables);
+    }
+    return this.replaceTemplateVariables(templateOrMessage, variables);
+  }
+
+  async getCenterName(centerId?: number): Promise<string> {
+    if (!centerId) return '';
+    const center = await this.educationCenterModel.findByPk(centerId, { attributes: ['name'] });
+    return center ? center.name.trim() : '';
+  }
+
+  getMonthNameUzbek(month: number): string {
+    const months = ['', 'Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'];
+    return months[month] || '';
+  }
+
+  private buildSmsVariables(extraVars: Record<string, string> | undefined, centerName: string, monthUzb: string, student?: any): Record<string, string> {
+    const base: Record<string, string> = {
+      markaz: centerName,
+      oy: extraVars?.oy || monthUzb,
+      summa: '0',
+      password: '',
+      bot: extraVars?.bot || '',
+      guruh: '',
+    };
+    if (extraVars) {
+      for (const key of Object.keys(extraVars)) {
+        if (key === 'summa') {
+          base.summa = String(extraVars.summa).replace(/\s+/g, '');
+        } else {
+          base[key] = extraVars[key];
+        }
+      }
+    }
+    return base;
+  }
+
+  // ─── Get Center Info ──────────────────────────────────────
+
+  async getCenterInfo(centerId: number) {
+    const center = await this.educationCenterModel.findByPk(centerId, { attributes: ['id', 'name'] });
+    if (!center) throw new HttpException('Markaz topilmadi', HttpStatus.NOT_FOUND);
+    return { id: center.id, name: center.name };
+  }
+
+  // ─── Search Students for SMS Selection ────────────────────
+
+  async searchStudents(search?: string, page = 1, limit = 20, centerId?: number) {
+    const where: any = { isActive: true };
+    if (centerId) where.center_id = centerId;
+    if (search) {
+      where[Op.or] = [
+        { first_name: { [Op.iLike]: `%${search}%` } },
+        { last_name: { [Op.iLike]: `%${search}%` } },
+        { phone_number: { [Op.iLike]: `%${search}%` } },
+      ];
+    }
+    const offset = (page - 1) * limit;
+    const { rows, count } = await this.studentModel.findAndCountAll({
+      where,
+      attributes: ['id', 'first_name', 'last_name', 'phone_number', 'group_id'],
+      limit,
+      offset,
+      order: [['first_name', 'ASC']],
+    });
+    return {
+      data: rows.map(s => ({
+        id: s.id,
+        first_name: s.first_name,
+        last_name: s.last_name,
+        phone_number: s.phone_number,
+        group_id: s.group_id,
+      })),
+      total: count,
+      page,
+      limit,
+      total_pages: Math.ceil(count / limit),
+    };
+  }
+
+  // ─── Search Teachers for SMS Selection ────────────────────
+
+  async searchTeachers(search?: string, page = 1, limit = 20, centerId?: number) {
+    const where: any = {};
+    if (centerId) where.center_id = centerId;
+    if (search) {
+      where[Op.or] = [
+        { first_name: { [Op.iLike]: `%${search}%` } },
+        { last_name: { [Op.iLike]: `%${search}%` } },
+        { phone_number: { [Op.iLike]: `%${search}%` } },
+      ];
+    }
+    const offset = (page - 1) * limit;
+    const { rows, count } = await this.teacherModel.findAndCountAll({
+      where,
+      attributes: ['id', 'first_name', 'last_name', 'phone_number'],
+      limit,
+      offset,
+      order: [['first_name', 'ASC']],
+    });
+    return {
+      data: rows.map(t => ({
+        id: t.id,
+        first_name: t.first_name,
+        last_name: t.last_name,
+        phone_number: t.phone_number,
+      })),
+      total: count,
+      page,
+      limit,
+      total_pages: Math.ceil(count / limit),
+    };
+  }
+
+  // ─── List Groups for SMS Selection ────────────────────────
+
+  async listGroups(search?: string, centerId?: number) {
+    const where: any = {};
+    if (centerId) where.center_id = centerId;
+    if (search) {
+      where.name = { [Op.iLike]: `%${search}%` };
+    }
+    const groups = await this.groupModel.findAll({
+      where,
+      attributes: ['id', 'name'],
+      order: [['name', 'ASC']],
+    });
+    return groups.map(g => ({ id: g.id, name: g.name }));
+  }
+
+  // ─── Send to Student ──────────────────────────────────────
+
+  async sendToStudent(
+    studentId: number,
+    templateOrMessage: string,
+    extraVars?: Record<string, string>,
+    centerId?: number,
+    createdBy?: number,
+  ): Promise<SmsLogModel> {
+    const student = await this.studentModel.findByPk(studentId, {
+      include: [{ model: EducationCenterModel }],
+    });
+    if (!student) throw new HttpException('Student topilmadi', HttpStatus.NOT_FOUND);
+    if (!student.phone_number) throw new HttpException('Student telefon raqami topilmadi', HttpStatus.BAD_REQUEST);
+
+    const centerName = await this.getCenterName(centerId || student.center_id);
+    const now = new Date();
+    const monthUzb = this.getMonthNameUzbek(now.getMonth() + 1);
+
+    const variables: Record<string, string> = this.buildSmsVariables(extraVars, centerName, monthUzb, student);
+    variables.ism = student.first_name || '';
+    variables.familiya = student.last_name || '';
+    variables.login = student.phone_number || '';
+
+    const message = await this.resolveTemplate(templateOrMessage, variables);
+    const log = await this.sendSms(student.phone_number, message, undefined, centerId || student.center_id, createdBy);
+    await log.update({
+      recipient_type: RecipientType.SINGLE_STUDENT,
+      recipient_id: student.id,
+      recipient_name: `${student.first_name} ${student.last_name}`,
+      template_category: typeof templateOrMessage === 'string' && templateOrMessage.includes('{') ? undefined : templateOrMessage,
+    });
+    return log;
+  }
+
+  // ─── Send to All Students ─────────────────────────────────
+
+  async sendToAllStudents(
+    templateOrMessage: string,
+    extraVars?: Record<string, string>,
+    centerId?: number,
+    createdBy?: number,
+  ): Promise<{ total: number; success: number; failed: number; logs: SmsLogModel[] }> {
+    const where: any = { isActive: true };
+    if (centerId) where.center_id = centerId;
+
+    const students = await this.studentModel.findAll({
+      where,
+      include: [{ model: EducationCenterModel }],
+    });
+
+    const studentsWithPhone = students.filter(s => s.phone_number);
+    const centerName = await this.getCenterName(centerId);
+    const now = new Date();
+    const monthUzb = this.getMonthNameUzbek(now.getMonth() + 1);
+    let success = 0;
+    let failed = 0;
+    const logs: SmsLogModel[] = [];
+
+    for (const student of studentsWithPhone) {
+      try {
+        const variables: Record<string, string> = this.buildSmsVariables(extraVars, centerName, monthUzb, student);
+        variables.ism = student.first_name || '';
+        variables.familiya = student.last_name || '';
+        variables.login = student.phone_number || '';
+
+        const message = await this.resolveTemplate(templateOrMessage, variables);
+        const log = await this.sendSms(student.phone_number, message, undefined, centerId || student.center_id, createdBy);
+        await log.update({
+          recipient_type: RecipientType.ALL_STUDENTS,
+          recipient_id: student.id,
+          recipient_name: `${student.first_name} ${student.last_name}`,
+          template_category: typeof templateOrMessage === 'string' && templateOrMessage.includes('{') ? undefined : templateOrMessage,
+        });
+        logs.push(log);
+        if (log.status === SmsStatus.SENT) success++;
+        else failed++;
+      } catch {
+        failed++;
+      }
+    }
+
+    return { total: studentsWithPhone.length, success, failed, logs };
+  }
+
+  // ─── Send to Teacher ──────────────────────────────────────
+
+  async sendToTeacher(
+    teacherId: number,
+    message: string,
+    centerId?: number,
+    createdBy?: number,
+  ): Promise<SmsLogModel> {
+    const teacher = await this.teacherModel.findByPk(teacherId);
+    if (!teacher) throw new HttpException("O'qituvchi topilmadi", HttpStatus.NOT_FOUND);
+    if (!teacher.phone_number) throw new HttpException("O'qituvchi telefon raqami topilmadi", HttpStatus.BAD_REQUEST);
+
+    const log = await this.sendSms(teacher.phone_number, message, undefined, centerId || teacher.center_id, createdBy);
+    await log.update({
+      recipient_type: RecipientType.SINGLE_TEACHER,
+      recipient_id: teacher.id,
+      recipient_name: `${teacher.first_name} ${teacher.last_name}`,
+    });
+    return log;
+  }
+
+  // ─── Send to All Teachers ─────────────────────────────────
+
+  async sendToAllTeachers(
+    message: string,
+    centerId?: number,
+    createdBy?: number,
+  ): Promise<{ total: number; success: number; failed: number; logs: SmsLogModel[] }> {
+    const where: any = {};
+    if (centerId) where.center_id = centerId;
+
+    const teachers = await this.teacherModel.findAll({ where });
+    const teachersWithPhone = teachers.filter(t => t.phone_number);
+    let success = 0;
+    let failed = 0;
+    const logs: SmsLogModel[] = [];
+
+    for (const teacher of teachersWithPhone) {
+      try {
+        const log = await this.sendSms(teacher.phone_number, message, undefined, centerId || teacher.center_id, createdBy);
+        await log.update({
+          recipient_type: RecipientType.ALL_TEACHERS,
+          recipient_id: teacher.id,
+          recipient_name: `${teacher.first_name} ${teacher.last_name}`,
+        });
+        logs.push(log);
+        if (log.status === SmsStatus.SENT) success++;
+        else failed++;
+      } catch {
+        failed++;
+      }
+    }
+
+    return { total: teachersWithPhone.length, success, failed, logs };
+  }
+
+  // ─── Send to Group Students ───────────────────────────────
+
+  async sendToGroupStudents(
+    groupId: number,
+    templateOrMessage: string,
+    extraVars?: Record<string, string>,
+    centerId?: number,
+    createdBy?: number,
+  ): Promise<{ total: number; success: number; failed: number; logs: SmsLogModel[] }> {
+    const group = await this.groupModel.findByPk(groupId);
+    if (!group) throw new HttpException('Guruh topilmadi', HttpStatus.NOT_FOUND);
+
+    const students = await this.studentModel.findAll({
+      where: { group_id: groupId, isActive: true },
+      include: [{ model: EducationCenterModel }],
+    });
+
+    const studentsWithPhone = students.filter(s => s.phone_number);
+    const centerName = await this.getCenterName(centerId || group.center_id);
+    const now = new Date();
+    const monthUzb = this.getMonthNameUzbek(now.getMonth() + 1);
+    let success = 0;
+    let failed = 0;
+    const logs: SmsLogModel[] = [];
+
+    for (const student of studentsWithPhone) {
+      try {
+        const variables: Record<string, string> = this.buildSmsVariables(extraVars, centerName, monthUzb, student);
+        variables.ism = student.first_name || '';
+        variables.familiya = student.last_name || '';
+        variables.login = student.phone_number || '';
+        variables.guruh = group.name;
+
+        const message = await this.resolveTemplate(templateOrMessage, variables);
+        const log = await this.sendSms(student.phone_number, message, undefined, centerId || student.center_id, createdBy);
+        await log.update({
+          recipient_type: RecipientType.GROUP_STUDENTS,
+          recipient_id: student.id,
+          recipient_name: `${student.first_name} ${student.last_name}`,
+          template_category: typeof templateOrMessage === 'string' && templateOrMessage.includes('{') ? undefined : templateOrMessage,
+        });
+        logs.push(log);
+        if (log.status === SmsStatus.SENT) success++;
+        else failed++;
+      } catch {
+        failed++;
+      }
+    }
+
+    return { total: studentsWithPhone.length, success, failed, logs };
+  }
+
+  // ─── Send to Selected Students ────────────────────────────
+
+  async sendToSelectedStudents(
+    studentIds: number[],
+    templateOrMessage: string,
+    extraVars?: Record<string, string>,
+    centerId?: number,
+    createdBy?: number,
+  ): Promise<{ total: number; success: number; failed: number; logs: SmsLogModel[] }> {
+    const students = await this.studentModel.findAll({
+      where: { id: studentIds, isActive: true },
+      include: [{ model: EducationCenterModel }],
+    });
+
+    const studentsWithPhone = students.filter(s => s.phone_number);
+    const centerName = await this.getCenterName(centerId);
+    const now = new Date();
+    const monthUzb = this.getMonthNameUzbek(now.getMonth() + 1);
+    let success = 0;
+    let failed = 0;
+    const logs: SmsLogModel[] = [];
+
+    for (const student of studentsWithPhone) {
+      try {
+        const variables: Record<string, string> = this.buildSmsVariables(extraVars, centerName, monthUzb, student);
+        variables.ism = student.first_name || '';
+        variables.familiya = student.last_name || '';
+        variables.login = student.phone_number || '';
+
+        const message = await this.resolveTemplate(templateOrMessage, variables);
+        const log = await this.sendSms(student.phone_number, message, undefined, centerId || student.center_id, createdBy);
+        await log.update({
+          recipient_type: RecipientType.SELECTED_STUDENTS,
+          recipient_id: student.id,
+          recipient_name: `${student.first_name} ${student.last_name}`,
+          template_category: typeof templateOrMessage === 'string' && templateOrMessage.includes('{') ? undefined : templateOrMessage,
+        });
+        logs.push(log);
+        if (log.status === SmsStatus.SENT) success++;
+        else failed++;
+      } catch {
+        failed++;
+      }
+    }
+
+    return { total: studentsWithPhone.length, success, failed, logs };
+  }
+
+  // ─── Send Credentials (Forgot Password) ────────────────────
+
+  async sendCredentials(
+    studentId: number,
+    botLink?: string,
+    centerId?: number,
+    createdBy?: number,
+  ): Promise<SmsLogModel> {
+    const student = await this.studentModel.findByPk(studentId, {
+      include: [{ model: EducationCenterModel }],
+    });
+    if (!student) throw new HttpException('Student topilmadi', HttpStatus.NOT_FOUND);
+    if (!student.phone_number) throw new HttpException('Student telefon raqami topilmadi', HttpStatus.BAD_REQUEST);
+
+    const centerName = await this.getCenterName(centerId || student.center_id);
+    const variables: Record<string, string> = {
+      ism: student.first_name || '',
+      familiya: student.last_name || '',
+      markaz: centerName,
+      login: student.phone_number || '',
+      password: student.password || '',
+      bot: botLink || '',
+    };
+
+    const message = await this.resolveTemplate('login_credentials', variables);
+    const log = await this.sendSms(student.phone_number, message, undefined, centerId || student.center_id, createdBy);
+    await log.update({
+      recipient_type: RecipientType.SINGLE_STUDENT,
+      recipient_id: student.id,
+      recipient_name: `${student.first_name} ${student.last_name}`,
+      template_category: 'login_credentials',
+    });
+    return log;
+  }
+
   // ─── OTP ─────────────────────────────────────────────────
 
   async sendOtp(phone: string, centerId?: number): Promise<{ success: boolean }> {
@@ -401,6 +854,7 @@ export class SmsService {
       where: { status: SmsStatus.PENDING, eskiz_message_id: { [Op.ne]: null } },
     });
 
+    let updated = 0;
     for (const log of pending) {
       try {
         const statusData = await this.getSmsStatus(log.eskiz_message_id!);
@@ -410,12 +864,26 @@ export class SmsService {
             status: eskizStatus === 'delivered' ? SmsStatus.DELIVERED : SmsStatus.SENT,
             delivered_at: eskizStatus === 'delivered' ? new Date() : undefined,
           });
+          updated++;
         } else if (eskizStatus === 'failed' || eskizStatus === 'error') {
           await log.update({ status: SmsStatus.FAILED });
+          updated++;
         }
       } catch {
         // skip individual errors
       }
+    }
+
+    if (updated > 0) {
+      this.auditService.log({
+        action: 'auto_update',
+        entity_type: 'sms',
+        entity_id: '',
+        entity_name: '',
+        description: `${updated} ta SMS holati yangilandi (${pending.length} tekshirildi)`,
+        admin_id: 0,
+        admin_name: 'Cron',
+      });
     }
   }
 
@@ -423,8 +891,27 @@ export class SmsService {
   async scheduledTokenRefresh() {
     try {
       await this.refreshToken();
+      this.logger.log('Eskiz token refreshed successfully');
+      this.auditService.log({
+        action: 'auto_refresh',
+        entity_type: 'sms',
+        entity_id: '',
+        entity_name: '',
+        description: 'Eskiz token muvaffaqiyatli yangilandi',
+        admin_id: 0,
+        admin_name: 'Cron',
+      });
     } catch (err: any) {
       this.logger.error(`Token refresh failed: ${err.message}`);
+      this.auditService.log({
+        action: 'auto_refresh',
+        entity_type: 'sms',
+        entity_id: '',
+        entity_name: '',
+        description: `Eskiz token yangilashda xatolik: ${err.message}`,
+        admin_id: 0,
+        admin_name: 'Cron',
+      });
     }
   }
 

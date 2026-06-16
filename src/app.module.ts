@@ -84,6 +84,8 @@ import { CenterApplicationsModule } from './modules/center-applications/center-a
 import { CenterApplicationModel } from './modules/center-applications/entities/center-application.entity';
 import { AuditModule } from './modules/audit/audit.module';
 import { AuditLogModel } from './modules/audit/entities/audit-log.entity';
+import { RedisModule } from './services/redis.module';
+import { CacheModule } from './services/cache.module';
 
 @Module({
   imports: [
@@ -175,6 +177,8 @@ import { AuditLogModel } from './modules/audit/entities/audit-log.entity';
     SmsModule,
     CenterApplicationsModule,
     AuditModule,
+    RedisModule,
+    CacheModule,
   ],
   controllers: [
   ],

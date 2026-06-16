@@ -24,6 +24,9 @@ export class AutoNotificationLogModel extends Model<AutoNotificationLogModel> {
   telegram_error: string;
 
   @Column({ type: DataType.BOOLEAN, allowNull: false, defaultValue: false })
+  sms_sent: boolean;
+
+  @Column({ type: DataType.BOOLEAN, allowNull: false, defaultValue: false })
   delivered: boolean;
 
   @Column({ type: DataType.TEXT, allowNull: true })

@@ -12,6 +12,10 @@ import { ParentModel } from '../parents/entities/parent.entity';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { NotificationService } from '../notification/notification.service';
+import { AuditService } from '../audit/audit.service';
+import { CacheService } from '../../services/cache.service';
+
+const monthNames = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'];
 
 @Injectable()
 export class PaymentService {
@@ -24,10 +28,12 @@ export class PaymentService {
     @InjectModel(ParentStudentModel) private parentStudentModel: typeof ParentStudentModel,
     @InjectModel(ParentModel) private parentModel: typeof ParentModel,
     private notificationService: NotificationService,
+    private auditService: AuditService,
+    private cacheService: CacheService,
     @InjectConnection() private sequelize: Sequelize,
   ) {}
 
-  async create(dto: CreatePaymentDto) {
+  async create(dto: CreatePaymentDto, user?: any) {
     const student = await this.studentModel.findByPk(dto.student_id);
     if (!student) throw new NotFoundException('Student topilmadi');
     const group = await this.groupModel.findByPk(dto.group_id);
@@ -45,6 +51,9 @@ export class PaymentService {
     }
 
     const centerId = (dto as any).center_id || student.center_id || null;
+    const adminId = user?.id || user?.sub || null;
+    const adminName = user?.full_name || user?.name || 'Unknown';
+
     const payment = await this.paymentModel.create({
       student_id: dto.student_id,
       group_id: dto.group_id,
@@ -54,8 +63,33 @@ export class PaymentService {
       status: dto.status || PaymentStatus.PAID,
       paid_at,
       note: dto.note || null,
+      created_by: adminId,
       center_id: centerId,
     });
+
+    const studentFullName = `${student.first_name} ${student.last_name}`.trim();
+    const monthLabel = monthNames[dto.month - 1] || dto.month;
+
+    this.auditService.log({
+      admin_id: adminId || 0,
+      admin_name: adminName,
+      action: 'create',
+      entity_type: 'payment',
+      entity_id: payment.id,
+      entity_name: studentFullName,
+      description: `To'lov qabul qilindi: ${studentFullName} | ${dto.amount} so'm | ${monthLabel} ${dto.year} | Admin: ${adminName}`,
+      center_id: centerId,
+      details: {
+        student_name: studentFullName,
+        amount: dto.amount,
+        month: dto.month,
+        year: dto.year,
+        admin_name: adminName,
+        admin_id: adminId,
+      },
+    });
+
+    this.cacheService.del(`cache:${centerId || 'global'}:/payments`);
 
     return this.paymentModel.findByPk(payment.id, {
       include: [
@@ -443,8 +477,13 @@ export class PaymentService {
     return result;
   }
 
-  async update(id: number, dto: UpdatePaymentDto) {
-    const payment = await this.paymentModel.findByPk(id);
+  async update(id: number, dto: UpdatePaymentDto, user?: any) {
+    const payment = await this.paymentModel.findByPk(id, {
+      include: [
+        { model: StudentModel, attributes: ['id', 'first_name', 'last_name', 'phone_number'] },
+        { model: GroupModel, attributes: ['id', 'name'] },
+      ],
+    });
     if (!payment) throw new NotFoundException('To\'lov topilmadi');
     
     // Agar status "paid" o'zgartirilsa, avtomatik paid_at-ni bugunning sanasiga tenglash
@@ -456,8 +495,42 @@ export class PaymentService {
     if (dto.paid_at && !dto.status) {
       dto.status = PaymentStatus.PAID;
     }
+
+    const oldStatus = payment.status;
+    const oldAmount = Number(payment.amount);
     
     await payment.update(dto);
+    
+    const adminName = user?.full_name || user?.name || 'Unknown';
+    const adminId = user?.id || user?.sub || 0;
+    const studentName = payment.student ? `${(payment.student as any).first_name} ${(payment.student as any).last_name}`.trim() : (payment as any).student_name || '';
+    const monthLabel = monthNames[Number(payment.month) - 1] || payment.month;
+    const newAmount = dto.amount !== undefined ? Number(dto.amount) : oldAmount;
+    const newStatus = dto.status || oldStatus;
+
+    this.auditService.log({
+      admin_id: adminId,
+      admin_name: adminName,
+      action: 'update',
+      entity_type: 'payment',
+      entity_id: id,
+      entity_name: studentName,
+      description: `To'lov yangilandi: ${studentName} | ${newAmount} so'm | ${monthLabel} ${payment.year} | ${oldStatus} -> ${newStatus} | Admin: ${adminName}`,
+      center_id: payment.center_id,
+      details: {
+        student_name: studentName,
+        old_amount: oldAmount,
+        new_amount: newAmount,
+        old_status: oldStatus,
+        new_status: newStatus,
+        month: payment.month,
+        year: payment.year,
+        admin_name: adminName,
+      },
+    });
+
+    this.cacheService.del(`cache:${payment.center_id || 'global'}:/payments`);
+
     return this.paymentModel.findByPk(id, {
       include: [
         { model: StudentModel, attributes: ['id', 'first_name', 'last_name'] },
@@ -466,10 +539,42 @@ export class PaymentService {
     });
   }
 
-  async remove(id: number) {
-    const payment = await this.paymentModel.findByPk(id);
+  async remove(id: number, user?: any) {
+    const payment = await this.paymentModel.findByPk(id, {
+      include: [
+        { model: StudentModel, attributes: ['id', 'first_name', 'last_name'] },
+      ],
+    });
     if (!payment) throw new NotFoundException('To\'lov topilmadi');
+
+    const studentName = payment.student ? `${(payment.student as any).first_name} ${(payment.student as any).last_name}`.trim() : '';
+    const monthLabel = monthNames[Number(payment.month) - 1] || payment.month;
+    const adminName = user?.full_name || user?.name || 'Unknown';
+    const adminId = user?.id || user?.sub || 0;
+    const amount = Number(payment.amount);
+
     await payment.destroy();
+
+    this.auditService.log({
+      admin_id: adminId,
+      admin_name: adminName,
+      action: 'delete',
+      entity_type: 'payment',
+      entity_id: id,
+      entity_name: studentName,
+      description: `To'lov o'chirildi: ${studentName} | ${amount} so'm | ${monthLabel} ${payment.year} | Admin: ${adminName}`,
+      center_id: payment.center_id,
+      details: {
+        student_name: studentName,
+        amount,
+        month: payment.month,
+        year: payment.year,
+        admin_name: adminName,
+      },
+    });
+
+    this.cacheService.del(`cache:${payment.center_id || 'global'}:/payments`);
+
     return { message: 'To\'lov o\'chirildi' };
   }
 

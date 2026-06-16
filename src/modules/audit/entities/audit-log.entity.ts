@@ -1,4 +1,4 @@
-import { Table, Column, Model, DataType, CreatedAt } from 'sequelize-typescript';
+import { Table, Column, Model, DataType } from 'sequelize-typescript';
 
 @Table({ tableName: 'audit_logs', timestamps: false })
 export class AuditLogModel extends Model {
@@ -32,7 +32,6 @@ export class AuditLogModel extends Model {
   @Column({ type: DataType.BIGINT, allowNull: true })
   center_id: number;
 
-  @CreatedAt
-  @Column({ type: DataType.DATE, allowNull: false })
+  @Column({ type: DataType.DATE, allowNull: false, defaultValue: DataType.NOW })
   created_at: Date;
 }

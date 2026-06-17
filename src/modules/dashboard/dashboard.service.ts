@@ -91,11 +91,12 @@ export class DashboardService {
     if (center_id) {
       result = await this.sequelize.query(`
         SELECT
-          DATE_TRUNC('month', "createdAt") as month,
-          COUNT(*)::int as count
-        FROM "students"
-        WHERE "center_id" = $1 AND "createdAt" >= $2
-        GROUP BY DATE_TRUNC('month', "createdAt")
+          DATE_TRUNC('month', gs.joined_date) as month,
+          COUNT(DISTINCT gs.student_id)::int as count
+        FROM group_students gs
+        JOIN groups g ON g.id = gs.group_id
+        WHERE g.center_id = $1 AND gs.joined_date >= $2
+        GROUP BY month
         ORDER BY month
       `, {
         bind: [center_id, new Date(now.getFullYear() - 1, now.getMonth(), 1)],
@@ -104,11 +105,11 @@ export class DashboardService {
     } else {
       result = await this.sequelize.query(`
         SELECT
-          DATE_TRUNC('month', "createdAt") as month,
-          COUNT(*)::int as count
-        FROM "students"
-        WHERE "createdAt" >= $1
-        GROUP BY DATE_TRUNC('month', "createdAt")
+          DATE_TRUNC('month', gs.joined_date) as month,
+          COUNT(DISTINCT gs.student_id)::int as count
+        FROM group_students gs
+        WHERE gs.joined_date >= $1
+        GROUP BY month
         ORDER BY month
       `, {
         bind: [new Date(now.getFullYear() - 1, now.getMonth(), 1)],

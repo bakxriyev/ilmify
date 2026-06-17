@@ -1,0 +1,106 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: ilmify-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ilmify
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: kamron123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: ilmify-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  nestjs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ilmify-backend
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    environment:
+      APP_PORT: 4000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ilmify
+      DB_USER: postgres
+      DB_PASSWORD: kamron123
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      AI_SERVICE_URL: http://python-ai:8000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ilmify-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  python-ai:
+    build:
+      context: ./ai
+      dockerfile: Dockerfile
+    container_name: ilmify-ai
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      AI_DB_HOST: postgres
+      AI_DB_PORT: 5432
+      AI_DB_NAME: ilmify
+      AI_DB_USER: postgres
+      AI_DB_PASSWORD: kamron123
+      AI_REDIS_HOST: redis
+      AI_REDIS_PORT: 6379
+      AI_REDIS_DB: 0
+      AI_JWT_SECRET: kamron123
+      AI_OLLAMA_BASE_URL: http://ollama:11434
+      AI_OLLAMA_MODEL: qwen3:8b
+      AI_CORS_ORIGINS: http://localhost:3000,http://localhost:4000
+      AI_DEBUG: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  ollama_data:

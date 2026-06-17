@@ -86,6 +86,7 @@ import { AuditModule } from './modules/audit/audit.module';
 import { AuditLogModel } from './modules/audit/entities/audit-log.entity';
 import { RedisModule } from './services/redis.module';
 import { CacheModule } from './services/cache.module';
+import { AiModule } from './modules/ai/ai.module';
 
 @Module({
   imports: [
@@ -179,6 +180,7 @@ import { CacheModule } from './services/cache.module';
     AuditModule,
     RedisModule,
     CacheModule,
+    AiModule,
   ],
   controllers: [
   ],

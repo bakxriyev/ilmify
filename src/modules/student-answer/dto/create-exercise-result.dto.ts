@@ -7,7 +7,7 @@ export class CreateExerciseResultDto {
   @IsInt()
   unit_id: number;
 
-  @IsInt("Integer bo`lsin")
+  @IsInt()
   
   exercise_id: number;
 }

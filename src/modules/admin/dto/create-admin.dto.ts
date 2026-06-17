@@ -13,7 +13,7 @@ export class CreateAdminDto {
 
   @ApiProperty({ 
     description: 'Elektron pochta manzili', 
-    example: 'kamronbahriyev@example.com' 
+    example: 'kamronbahriyev@example.comewqewqeqwe' 
   })
   @IsEmail()
   @IsNotEmpty()

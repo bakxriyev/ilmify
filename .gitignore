@@ -4,3 +4,11 @@ dist
 node_modules
 /uploads
 .next
+
+venv/
+**/__pycache__/
+*.pyc
+*.pyo
+.env
+ai/venv/
+EOF

@@ -8,9 +8,13 @@ import {
   Delete,
   ParseIntPipe,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
   Request,
   UnauthorizedException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { multerOptions } from '../../config/multer.config';
 import { AdminService } from './admin.service';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { UpdateAdminDto } from './dto/update-admin.dto';
@@ -18,7 +22,7 @@ import { UpdatePermissionsDto } from './dto/update-permissions.dto';
 import { PhoneLoginDto } from './dto/login-admin.dto';
 import { ChangePasswordDto } from './dto/change-password.admin';
 import { RefreshTokenDto } from './dto/refresh-token';
-import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import * as jwt from 'jsonwebtoken';
 
 @ApiTags('admin')
@@ -170,7 +174,21 @@ export class AdminController {
     return this.adminService.findOne(id);
   }
 
-  // PATCH /admin/:id - Admin ma'lumotlarini yangilash
+  // POST /admin/:id/photo - Admin rasmini yuklash (multer)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Upload admin photo (multipart)' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ schema: { type: 'object', properties: { photo: { type: 'string', format: 'binary' } } } })
+  @Post(':id/photo')
+  @UseInterceptors(FileInterceptor('photo', multerOptions))
+  async uploadPhoto(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    return this.adminService.update(id, { photo: file.filename } as any);
+  }
+
+  // PATCH /admin/:id - Admin ma'lumotlarini yangilash (JSON)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update admin' })
   @Patch(':id')

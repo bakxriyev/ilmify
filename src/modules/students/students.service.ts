@@ -515,7 +515,8 @@ export class StudentService {
     });
 
     const filteredStudents = students.filter(
-      (student) => !student.group_students || student.group_students.length === 0,
+      (student) => !student.group_students || student.group_students.length === 0 ||
+        student.group_students.every((gs: any) => gs.left_date !== null),
     );
 
     return { data: filteredStudents, total: filteredStudents.length };

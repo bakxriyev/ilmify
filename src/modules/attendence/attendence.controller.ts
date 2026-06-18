@@ -1,5 +1,5 @@
-import { Controller, Post, Body, Get, Query, Param, ParseIntPipe } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { Controller, Post, Body, Get, Query, Param, ParseIntPipe, Delete } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { AttendanceService } from './attendence.service'
 import { MarkLessonAttendanceDto } from './dto/mark-attendance.dto'
 
@@ -41,5 +41,16 @@ export class AttendanceController {
       Number(year),
       Number(month),
     );
+  }
+
+  @Delete('by-center/:centerId')
+  @ApiOperation({ summary: 'Markazdagi barcha davomatlarni tozalash' })
+  @ApiParam({ name: 'centerId', type: Number })
+  @ApiQuery({ name: 'group_id', required: false, type: Number, description: 'Agar berilsa, faqat shu guruhdagi davomatlar tozalanadi' })
+  clearByCenter(
+    @Param('centerId', ParseIntPipe) centerId: number,
+    @Query('group_id') groupId?: string,
+  ) {
+    return this.service.clearAttendances(centerId, groupId ? Number(groupId) : undefined);
   }
 }

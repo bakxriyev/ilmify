@@ -283,13 +283,20 @@ async create(createGroupDto: CreateGroupDto, center_id?: number): Promise<GroupM
   async addStudentToGroup(groupId: number, studentId: number, joined_date?: string): Promise<GroupStudentModel> {
     await this.findOne(groupId); // Guruh borligini tekshirish
 
-    // Student allaqachon guruhda emasligini tekshirish
+    // Student allaqachon guruhda faol ekanligini tekshirish
     const existing = await this.groupStudentModel.findOne({
       where: { group_id: groupId, student_id: studentId },
     });
 
     if (existing) {
-      throw new ConflictException('Student allaqachon guruhda');
+      if (!existing.left_date) {
+        throw new ConflictException('Student allaqachon guruhda');
+      }
+      // Oldin chiqib ketgan bo'lsa, qayta faollashtirish
+      const joinDate = joined_date ? new Date(joined_date) : new Date();
+      await existing.update({ joined_date: joinDate, left_date: null });
+      await StudentModel.update({ group_id: groupId }, { where: { id: studentId } });
+      return existing;
     }
 
     const result = await this.groupStudentModel.create({

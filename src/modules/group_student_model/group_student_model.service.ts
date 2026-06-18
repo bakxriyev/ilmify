@@ -5,6 +5,8 @@ import { GroupStudentModel } from './model/group_student_model.entity';
 import { GroupModel } from '../groups/model/group.entity';
 import { StudentModel } from '../students/model/student.entity';
 import { LevelModel } from '../level/model/level.entity';
+import { ParentStudentModel } from '../parents/entities/parent-student.entity';
+import { ParentModel } from '../parents/entities/parent.entity';
 import { CreateGroupStudentDto } from './dto';
 import { UpdateGroupStudentDto } from './dto';
 import { QueryGroupStudentDto } from './dto';
@@ -144,7 +146,20 @@ export class GroupStudentService {
     const rows = await this.groupStudentModel.findAll({
       where: { group_id: groupId },
       include: [
-        { model: StudentModel, as: 'student' },
+        {
+          model: StudentModel,
+          as: 'student',
+          include: [{
+            model: ParentStudentModel,
+            as: 'parent_links',
+            required: false,
+            include: [{
+              model: ParentModel,
+              as: 'parent',
+              attributes: ['id', 'first_name', 'last_name', 'phone_number'],
+            }],
+          }],
+        },
       ],
       order: [['joined_date', 'ASC']],
     });

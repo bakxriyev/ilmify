@@ -1,13 +1,25 @@
-// dto/update-group-student.dto.ts
-import { PartialType } from '@nestjs/swagger';
-import { CreateGroupStudentDto } from './create-group_student_model.dto';
-
-export class UpdateGroupStudentDto extends PartialType(CreateGroupStudentDto) {}
-
-// dto/query-group-student.dto.ts
-import { IsOptional, IsNumber, IsString } from 'class-validator';
+import { IsOptional, IsNumber, IsDateString, IsString } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
+
+export class UpdateGroupStudentDto {
+  @ApiPropertyOptional({ description: 'Group ID', example: 1 })
+  @IsOptional()
+  @Transform(({ value }) => (value ? parseInt(value) : value))
+  @IsNumber()
+  group_id?: number;
+
+  @ApiPropertyOptional({ description: 'Student ID', example: 1 })
+  @IsOptional()
+  @Transform(({ value }) => (value ? parseInt(value) : value))
+  @IsNumber()
+  student_id?: number;
+
+  @ApiPropertyOptional({ description: 'Join date', example: '2024-01-15' })
+  @IsOptional()
+  @IsDateString()
+  joined_date?: string;
+}
 
 export class QueryGroupStudentDto {
   @ApiPropertyOptional({ description: 'Page number', example: 1 })

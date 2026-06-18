@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, Query, Req, Res } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiQuery, ApiParam } from '@nestjs/swagger';
 import { Response } from 'express';
 import { PaymentService } from './payment.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
@@ -44,8 +44,8 @@ export class PaymentController {
 
   @Get('stats')
   @ApiOperation({ summary: "To'lov statistikasi" })
-  getStats() {
-    return this.service.getStats();
+  getStats(@Req() req?: any) {
+    return this.service.getStats(req?.center_id);
   }
 
   @Get('auto-generate')
@@ -122,10 +122,18 @@ export class PaymentController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: "To'lovni o'chirish" })
+  @ApiOperation({ summary: "Bitta to'lovni ID bo'yicha o'chirish" })
+  @ApiParam({ name: 'id', required: true, description: "To'lov ID si - raqam kiriting (masalan: 22)", example: 22 })
   remove(@Param('id') id: string, @Req() req?: any) {
     const user = req?.user;
     return this.service.remove(Number(id), user);
+  }
+
+  @Delete('all/by-center/:center_id')
+  @ApiOperation({ summary: "Center ID bo'yicha barcha to'lovlarni o'chirish" })
+  @ApiParam({ name: 'center_id', required: true, description: "Education Center ID", example: 1 })
+  removeAllByCenter(@Param('center_id') center_id: string) {
+    return this.service.removeAllByCenter(Number(center_id));
   }
 
   @Post('check-reminders')

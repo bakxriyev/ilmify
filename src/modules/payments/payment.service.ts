@@ -42,7 +42,9 @@ export class PaymentService {
     const existing = await this.paymentModel.findOne({
       where: { student_id: dto.student_id, month: dto.month, year: dto.year },
     });
-    if (existing) throw new BadRequestException('Bu oy uchun to\'lov allaqachon yaratilgan');
+    if (existing && existing.status === PaymentStatus.PAID) {
+      throw new BadRequestException('Bu oy uchun to\'lov allaqachon to\'langan');
+    }
 
     // Status "paid" bo'lsa, paid_at avtomatik shu kunning sanasiga tenglashadi
     let paid_at = dto.paid_at || null;
@@ -130,15 +132,17 @@ export class PaymentService {
     const now = new Date();
     const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const requestedMonthStart = new Date(year, month - 1, 1);
-    if (requestedMonthStart > currentMonthStart) return [];
+    if (year < 2020 || year > new Date().getFullYear() + 5) return [];
 
     const monthStart = new Date(year, month - 1, 1);
     const monthEnd = new Date(year, month, 0, 23, 59, 59);
     const isCurrentMonth = month === now.getMonth() + 1 && year === now.getFullYear();
+    const isFutureMonth = requestedMonthStart > currentMonthStart;
 
     const relationWhere: any = {};
-    if (isCurrentMonth) {
+    if (isCurrentMonth || isFutureMonth) {
       relationWhere.left_date = null;
+      relationWhere.joined_date = { [Op.lte]: monthEnd };
     } else {
       const groupsWithLessons = await GroupLessonModel.findAll({
         where: { date: { [Op.gte]: monthStart, [Op.lte]: monthEnd } },
@@ -261,7 +265,9 @@ export class PaymentService {
 
       const studentPayments = allPayments.filter(p => Number(p.student_id) === entry.student.id);
       const paidPayments = studentPayments.filter(p => p.status === PaymentStatus.PAID);
-      const totalPaidAmount = paidPayments.reduce((sum, p) => sum + Number(p.amount), 0);
+      const partialPayments = studentPayments.filter(p => p.status === PaymentStatus.PARTIAL);
+      const totalPaidAmount = paidPayments.reduce((sum, p) => sum + Number(p.amount), 0) +
+        partialPayments.reduce((sum, p) => sum + Number(p.amount), 0);
       const latestPayment = studentPayments.length > 0 ? studentPayments.reduce((latest, p) =>
         new Date(p.created_at) > new Date(latest.created_at) ? p : latest
       ) : null;
@@ -290,6 +296,25 @@ export class PaymentService {
 
       const debt = Math.max(0, effectivePrice - totalPaidAmount);
 
+      // Overdue lessons: faqat o'tgan va joriy oylar uchun hisoblanadi (kelasi oylar uchun 0)
+      let overdueLessons = 0;
+      if (status !== PaymentStatus.PAID && relation && !isFutureMonth) {
+        const allPaymentRecords = [...paidPayments, ...partialPayments];
+        const lastPayment = allPaymentRecords.length > 0 ? allPaymentRecords.reduce((latest, p) =>
+          new Date(p.paid_at || p.created_at) > new Date(latest.paid_at || latest.created_at) ? p : latest
+        ) : null;
+        const sinceDate = lastPayment?.paid_at
+          ? new Date(lastPayment.paid_at)
+          : new Date(relation.joined_date);
+        const overdueCount = await this.groupLessonModel.count({
+          where: {
+            group_id: groupId,
+            date: { [Op.gte]: sinceDate, [Op.lt]: new Date() },
+          },
+        });
+        overdueLessons = overdueCount;
+      }
+
       result.push({
         student: entry.student,
         group: entry.group,
@@ -301,7 +326,7 @@ export class PaymentService {
         effective_price: effectivePrice,
         paid_amount: totalPaidAmount,
         debt,
-        overdue_lessons: status === PaymentStatus.PAID ? 0 : totalLessons,
+        overdue_lessons: overdueLessons,
       });
     }
 
@@ -312,7 +337,7 @@ export class PaymentService {
     const now = new Date();
     const months = [];
     for (let m = 1; m <= 12; m++) {
-      if (year > now.getFullYear() || (year === now.getFullYear() && m > now.getMonth() + 1)) {
+      if (year < 2020 || year > new Date().getFullYear() + 5) {
         months.push({ month: m, year, total: 0, paid: 0, unpaid: 0, partial: 0 });
         continue;
       }
@@ -361,10 +386,6 @@ export class PaymentService {
     const targetMonth = month || now.getMonth() + 1;
     const targetYear = year || now.getFullYear();
 
-    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const requestedMonthStart = new Date(targetYear, targetMonth - 1, 1);
-    if (requestedMonthStart > currentMonthStart) return [];
-
     const monthStart = new Date(targetYear, targetMonth - 1, 1);
     const monthEnd = new Date(targetYear, targetMonth, 0, 23, 59, 59);
 
@@ -375,9 +396,12 @@ export class PaymentService {
 
     // Shu oyda guruhda faol bo'lgan studentlarni olish
     const isCurrentMonth = targetMonth === now.getMonth() + 1 && targetYear === now.getFullYear();
+    const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const requestedMonthStart = new Date(targetYear, targetMonth - 1, 1);
+    const isFutureMonth = requestedMonthStart > currentMonthStart;
     const groupStudentWhere: any = { group_id: groupId };
     groupStudentWhere.joined_date = { [Op.lte]: monthEnd };
-    if (isCurrentMonth) {
+    if (isCurrentMonth || isFutureMonth) {
       groupStudentWhere.left_date = null;
     } else {
       groupStudentWhere[Op.or] = [
@@ -578,12 +602,28 @@ export class PaymentService {
     return { message: 'To\'lov o\'chirildi' };
   }
 
-  async getStats() {
-    const totalPayments = await this.paymentModel.count();
-    const paidCount = await this.paymentModel.count({ where: { status: PaymentStatus.PAID } });
-    const unpaidCount = await this.paymentModel.count({ where: { status: PaymentStatus.UNPAID } });
-    const partialCount = await this.paymentModel.count({ where: { status: PaymentStatus.PARTIAL } });
-    const totalAmount = await this.paymentModel.sum('amount', { where: { status: PaymentStatus.PAID } });
+  async removeAllByCenter(center_id: number) {
+    const deleteCount = await this.paymentModel.destroy({
+      where: {
+        [Op.or]: [
+          { center_id },
+          { center_id: null },
+        ],
+      },
+    });
+    this.cacheService.del(`cache:${center_id}:/payments`);
+    this.cacheService.del(`cache:global:/payments`);
+    return { message: `${deleteCount} ta to'lov o'chirildi`, deleted_count: deleteCount };
+  }
+
+  async getStats(center_id?: number) {
+    const where: any = {};
+    if (center_id) where.center_id = center_id;
+    const totalPayments = await this.paymentModel.count({ where });
+    const paidCount = await this.paymentModel.count({ where: { ...where, status: PaymentStatus.PAID } });
+    const unpaidCount = await this.paymentModel.count({ where: { ...where, status: PaymentStatus.UNPAID } });
+    const partialCount = await this.paymentModel.count({ where: { ...where, status: PaymentStatus.PARTIAL } });
+    const totalAmount = await this.paymentModel.sum('amount', { where: { ...where, status: PaymentStatus.PAID } });
     return { total: totalPayments, paid: paidCount, unpaid: unpaidCount, partial: partialCount, total_amount: totalAmount || 0 };
   }
 
@@ -965,6 +1005,11 @@ export class PaymentService {
 
     const monthNames = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'];
 
+    const activeGroups = groupStudents
+      .filter(gs => !gs.left_date)
+      .map(gs => ({ id: Number((gs as any).group?.id || gs.group_id), name: (gs as any).group?.name || '' }))
+      .filter(g => g.id > 0);
+
     return {
       student: {
         id: student.id,
@@ -977,6 +1022,7 @@ export class PaymentService {
       orphaned_payments: orphanedPayments.map(p => ({ ...p, month_name: monthNames[p.month - 1] })),
       total_debt: debts.reduce((sum, d) => sum + (d.amount || 0), 0),
       paid_total: paidPayments.reduce((sum, p) => sum + (p.amount || 0), 0),
+      student_groups: activeGroups,
     };
   }
 }

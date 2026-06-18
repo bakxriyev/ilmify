@@ -184,6 +184,26 @@ export class AttendanceService {
   }
 
   /*
+  ATTENDANCELARNI TOZALASH
+  center_id bo'yicha (barcha guruhlar) yoki center_id + group_id bo'yicha
+  */
+  async clearAttendances(centerId: number, groupId?: number) {
+    const whereGroup: any = { center_id: centerId };
+    if (groupId) {
+      whereGroup.id = groupId;
+    }
+    const groups = await this.groupRepo.findAll({ where: whereGroup });
+    if (!groups.length) {
+      return { deleted: 0 };
+    }
+    const groupIds = groups.map(g => g.id);
+    const deleted = await this.attendanceRepo.destroy({
+      where: { group_id: groupIds },
+    });
+    return { deleted };
+  }
+
+  /*
   OYLIK STATISTIKA
   */
   async monthlyStats(group_id: number, year: number, month: number) {

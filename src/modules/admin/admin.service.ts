@@ -107,7 +107,10 @@ export class AdminService {
     const existingAdminByEmail = await this.findByEmail(createAdminDto.email);
     if (existingAdminByEmail) throw new ConflictException('Admin with this email already exists');
 
-    const existingAdminByPhone = await this.findByPhone(createAdminDto.phone_number);
+    // Telefon raqam unikalligini tekshirish: faqat bir xil role va bir xil center_id dagi adminlar bilan solishtirish
+    const phoneWhere: any = { phone_number: createAdminDto.phone_number, role };
+    if (center_id) phoneWhere.center_id = center_id;
+    const existingAdminByPhone = await this.adminModel.findOne({ where: phoneWhere });
     if (existingAdminByPhone) throw new ConflictException('Admin with this phone number already exists');
 
     const hashedPassword = await bcrypt.hash(createAdminDto.password, 10);
@@ -150,7 +153,8 @@ export class AdminService {
 
   // Director - yangi admin yaratish (markazga biriktirilgan)
   async createCenterAdmin(createAdminDto: CreateAdminDto, center_id: number) {
-    const existing = await this.adminModel.findOne({ where: { phone_number: createAdminDto.phone_number } });
+    // Telefon raqam faqat shu markaz va ADMIN roli uchun tekshiriladi
+    const existing = await this.adminModel.findOne({ where: { phone_number: createAdminDto.phone_number, role: AdminRole.ADMIN, center_id } });
     if (existing) throw new ConflictException('Bu telefon raqam bilan admin allaqachon mavjud');
     return this.createAdmin(createAdminDto, AdminRole.ADMIN, center_id);
   }
@@ -209,9 +213,11 @@ export class AdminService {
       }
     }
 
-    // Agar phone number yangilanayotgan bo'lsa, mavjudligini tekshirish
+    // Agar phone number yangilanayotgan bo'lsa, mavjudligini tekshirish (bir xil role va center_id bo'yicha)
     if (updateAdminDto.phone_number && updateAdminDto.phone_number !== admin.phone_number) {
-      const existingAdmin = await this.findByPhone(updateAdminDto.phone_number);
+      const phoneWhere: any = { phone_number: updateAdminDto.phone_number, role: admin.role };
+      if (admin.center_id) phoneWhere.center_id = admin.center_id;
+      const existingAdmin = await this.adminModel.findOne({ where: phoneWhere });
       if (existingAdmin) {
         throw new ConflictException('Admin with this phone number already exists');
       }

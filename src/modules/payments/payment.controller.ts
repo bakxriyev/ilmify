@@ -24,12 +24,18 @@ export class PaymentController {
   @ApiQuery({ name: 'month', required: false })
   @ApiQuery({ name: 'year', required: false })
   @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'payment_type', required: false, description: 'To\'lov turi: click, naqt, karta yoki boshqa matn' })
+  @ApiQuery({ name: 'date_from', required: false, description: 'Sanadan boshlab (YYYY-MM-DD)' })
+  @ApiQuery({ name: 'date_to', required: false, description: 'Sanagacha (YYYY-MM-DD)' })
   findAll(
     @Query('group_id') group_id?: string,
     @Query('student_id') student_id?: string,
     @Query('month') month?: string,
     @Query('year') year?: string,
     @Query('status') status?: string,
+    @Query('payment_type') payment_type?: string,
+    @Query('date_from') date_from?: string,
+    @Query('date_to') date_to?: string,
     @Req() req?: any,
   ) {
     return this.service.findAll(
@@ -38,6 +44,9 @@ export class PaymentController {
       month ? Number(month) : undefined,
       year ? Number(year) : undefined,
       status,
+      payment_type,
+      date_from,
+      date_to,
       req?.center_id,
     );
   }
@@ -181,7 +190,7 @@ export class PaymentController {
       rows.push([]);
 
       // Row 3: Headers
-      const headers = ['No', 'Student Ismi', 'Telefon', 'Guruh', 'Oy', 'Yil', 'Oylik narx', 'Unumli narx', "To'langan", 'Qarz', 'Status', "Kechikkan darslar", 'Izoh'];
+      const headers = ['No', 'Student Ismi', 'Telefon', 'Guruh', 'Oy', 'Yil', 'Oylik narx', 'Unumli narx', "To'langan", 'Qarz', 'Status', "To'lov turi", "Kechikkan darslar", 'Izoh'];
       rows.push(headers);
 
       // Data rows
@@ -198,6 +207,7 @@ export class PaymentController {
           Number(item["To'langan"]),
           Number(item['Qarz']),
           item['Status'],
+          item["To'lov turi"] || '-',
           Number(item['Kechikkan darslar']),
           item['Izoh'],
         ]);
@@ -217,8 +227,8 @@ export class PaymentController {
 
       // Merge title row
       ws['!merges'] = [
-        { s: { r: 0, c: 0 }, e: { r: 0, c: 12 } },  // Title
-        { s: { r: rows.length - 4, c: 0 }, e: { r: rows.length - 4, c: 12 } },  // Summary header
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 13 } },  // Title
+        { s: { r: rows.length - 4, c: 0 }, e: { r: rows.length - 4, c: 13 } },  // Summary header
       ];
 
       // Column widths
@@ -234,6 +244,7 @@ export class PaymentController {
         { wch: 14 },  // To'langan
         { wch: 14 },  // Qarz
         { wch: 14 },  // Status
+        { wch: 14 },  // To'lov turi
         { wch: 14 },  // Kechikkan darslar
         { wch: 22 },  // Izoh
       ];
@@ -256,14 +267,14 @@ export class PaymentController {
 
       // Summary header row
       const summaryRow = rows.length - 4;
-      for (let c = 0; c < 13; c++) {
+      for (let c = 0; c < 14; c++) {
         const cellRef = XLSX.utils.encode_cell({ r: summaryRow, c });
         if (ws[cellRef]) ws[cellRef].s = summaryStyle;
       }
 
       // Bold for summary data labels
       for (let r = rows.length - 3; r < rows.length; r++) {
-        for (let c = 0; c < 13; c++) {
+        for (let c = 0; c < 14; c++) {
           const cellRef = XLSX.utils.encode_cell({ r, c });
           if (ws[cellRef] && ws[cellRef].v) {
             ws[cellRef].s = { ...ws[cellRef].s, font: { bold: true, sz: 11 } };
@@ -273,7 +284,7 @@ export class PaymentController {
 
       // Alignment
       for (let r = 0; r < rows.length; r++) {
-        for (let c = 0; c < 13; c++) {
+        for (let c = 0; c < 14; c++) {
           const cellRef = XLSX.utils.encode_cell({ r, c });
           if (ws[cellRef]) {
             ws[cellRef].s = {

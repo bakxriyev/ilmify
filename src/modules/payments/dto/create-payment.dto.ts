@@ -16,6 +16,9 @@ export class CreatePaymentDto {
   @ApiProperty({ example: 2026 })
   year: number;
 
+  @ApiProperty({ required: false, example: 'naqt', description: 'To\'lov turi: click, naqt, karta yoki boshqa matn' })
+  payment_type?: string;
+
   @ApiProperty({ required: false, example: 'To\'lov qilindi' })
   note?: string;
 

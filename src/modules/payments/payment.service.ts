@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/sequelize';
-import { Op, Sequelize } from 'sequelize';
+import { Op, Sequelize, WhereOptions } from 'sequelize';
 import { QueryTypes } from 'sequelize';
 import { PaymentModel, PaymentStatus } from './entities/payment.entity';
 import { StudentModel } from '../students/model/student.entity';
@@ -64,6 +64,7 @@ export class PaymentService {
       year: dto.year,
       status: dto.status || PaymentStatus.PAID,
       paid_at,
+      payment_type: dto.payment_type || null,
       note: dto.note || null,
       created_by: adminId,
       center_id: centerId,
@@ -101,14 +102,21 @@ export class PaymentService {
     });
   }
 
-  async findAll(group_id?: number, student_id?: number, month?: number, year?: number, status?: string, center_id?: number) {
-    const where: any = {};
+  async findAll(group_id?: number, student_id?: number, month?: number, year?: number, status?: string, payment_type?: string, date_from?: string, date_to?: string, center_id?: number) {
+    const where: WhereOptions<any> = {};
     if (center_id) where.center_id = center_id;
     if (group_id) where.group_id = group_id;
     if (student_id) where.student_id = student_id;
     if (month) where.month = month;
     if (year) where.year = year;
     if (status) where.status = status;
+    if (payment_type) where.payment_type = payment_type;
+    if (date_from || date_to) {
+      const paidAtWhere: any = {};
+      if (date_from) paidAtWhere[Op.gte] = date_from;
+      if (date_to) paidAtWhere[Op.lte] = date_to;
+      where.paid_at = paidAtWhere;
+    }
 
     return this.paymentModel.findAll({
       where,
@@ -318,7 +326,7 @@ export class PaymentService {
       result.push({
         student: entry.student,
         group: entry.group,
-        payment: latestPayment ? { id: latestPayment.id, amount: latestPayment.amount, status: latestPayment.status, paid_at: latestPayment.paid_at, note: latestPayment.note, created_by: latestPayment.created_by, created_at: latestPayment.created_at, student_id: latestPayment.student_id, group_id: latestPayment.group_id, month, year } : null,
+        payment: latestPayment ? { id: latestPayment.id, amount: latestPayment.amount, status: latestPayment.status, paid_at: latestPayment.paid_at, payment_type: latestPayment.payment_type, note: latestPayment.note, created_by: latestPayment.created_by, created_at: latestPayment.created_at, student_id: latestPayment.student_id, group_id: latestPayment.group_id, month, year } : null,
         status,
         month,
         year,
@@ -482,10 +490,13 @@ export class PaymentService {
 
       const debt = status === PaymentStatus.PAID ? 0 : Math.max(0, effectivePrice - paidAmount);
 
+      const paymentType = payment?.payment_type || null;
+
       return {
         student: { id: s.id, first_name: s.first_name, last_name: s.last_name, phone_number: s.phone_number },
         group: { id: groupId, name: group?.name || '', monthly_price: monthlyPrice },
         payment: payment || null,
+        payment_type: paymentType,
         status,
         month: targetMonth,
         year: targetYear,
@@ -798,6 +809,12 @@ export class PaymentService {
     const data = await this.getStudentsOverview(month, year, center_id);
     const monthNames = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'];
 
+    const paymentTypeLabel = (type: string | null | undefined) => {
+      if (!type) return '-';
+      const map: any = { click: 'Click', naqt: 'Naqt', karta: 'Karta' };
+      return map[type] || type;
+    };
+
     const exportData = data.map((item: any, index: number) => ({
       'No': index + 1,
       'Student Ismi': `${item.student.first_name} ${item.student.last_name}`,
@@ -810,6 +827,7 @@ export class PaymentService {
       'To\'langan': item.paid_amount,
       'Qarz': item.debt,
       'Status': item.status === 'paid' ? 'To\'langan' : item.status === 'unpaid' ? 'To\'lanmagan' : 'Qisman',
+      'To\'lov turi': paymentTypeLabel(item.payment?.payment_type),
       'Kechikkan darslar': item.overdue_lessons || 0,
       'Izoh': item.payment?.note || '',
     }));
@@ -927,6 +945,8 @@ export class PaymentService {
           }
         }
 
+        const paymentType = payment?.payment_type || null;
+
         if (payment) {
           const paidAmount = Number(payment.amount);
           const isPaid = payment.status === PaymentStatus.PAID;
@@ -936,6 +956,7 @@ export class PaymentService {
               group_id: groupId, group_name: group.name,
               amount: paidAmount, status: 'paid',
               paid_at: payment.paid_at,
+              payment_type: paymentType,
             });
           } else if (isPaid && paidAmount > 0) {
             paidPayments.push({
@@ -943,6 +964,7 @@ export class PaymentService {
               group_id: groupId, group_name: group.name,
               amount: paidAmount, status: 'partial',
               paid_at: payment.paid_at,
+              payment_type: paymentType,
             });
             if (effectivePrice > paidAmount) {
               debts.push({
@@ -991,6 +1013,7 @@ export class PaymentService {
             amount: Number(payment.amount),
             status: payment.status,
             paid_at: payment.paid_at,
+            payment_type: payment.payment_type,
             created_at: payment.created_at,
             note: payment.note,
           });

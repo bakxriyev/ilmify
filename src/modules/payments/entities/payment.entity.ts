@@ -15,6 +15,7 @@ export enum PaymentStatus {
   { fields: ['month', 'year', 'group_id'] },
   { fields: ['group_id', 'student_id'] },
   { fields: ['center_id'] },
+  { fields: ['payment_type'] },
 ] })
 export class PaymentModel extends Model {
   @Column({ type: DataType.BIGINT, autoIncrement: true, primaryKey: true })
@@ -42,6 +43,9 @@ export class PaymentModel extends Model {
 
   @Column({ type: DataType.DATEONLY, allowNull: true })
   paid_at: string;
+
+  @Column({ type: DataType.STRING, allowNull: true })
+  payment_type: string;
 
   @Column({ type: DataType.STRING, allowNull: true })
   note: string;

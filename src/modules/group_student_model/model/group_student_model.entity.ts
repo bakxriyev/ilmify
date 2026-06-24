@@ -31,6 +31,6 @@ export class GroupStudentModel extends Model {
   @BelongsTo(() => GroupModel, { as: 'group', onDelete: 'CASCADE' })
   group: GroupModel;
 
-  @BelongsTo(() => StudentModel, { as: 'student' })
+  @BelongsTo(() => StudentModel, { as: 'student', onDelete: 'CASCADE' })
   student: StudentModel;
 }

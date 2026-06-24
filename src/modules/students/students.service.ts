@@ -171,10 +171,20 @@ export class StudentService {
     const whereClause: any = {};
     if (center_id) whereClause.center_id = center_id;
 
+    const gsStudents = await GroupStudentModel.findAll({
+      where: { left_date: null },
+      attributes: ['student_id'],
+    });
+    const gsIds = [...new Set(gsStudents.map(gs => gs.student_id))];
+
     const [total, active, withGroup] = await Promise.all([
       this.studentModel.count({ where: whereClause }),
       this.studentModel.count({ where: { ...whereClause, isActive: true } }),
-      this.studentModel.count({ where: { ...whereClause, group_id: { [Op.ne]: null } } }),
+      gsIds.length > 0
+        ? this.studentModel.count({
+            where: { ...whereClause, id: { [Op.in]: gsIds } },
+          })
+        : Promise.resolve(0),
     ]);
 
     return {
@@ -200,12 +210,29 @@ export class StudentService {
     if (center_id) whereClause.center_id = center_id;
 
     if (queryDto.search) {
-      whereClause[Op.or] = [
-        { first_name: { [Op.iLike]: `%${queryDto.search}%` } },
-        { last_name: { [Op.iLike]: `%${queryDto.search}%` } },
-        { email: { [Op.iLike]: `%${queryDto.search}%` } },
-        { phone_number: { [Op.iLike]: `%${queryDto.search}%` } },
+      let search = queryDto.search.trim().replace(/\s+/g, ' ');
+      search = search.replace(/[''`´]/g, "'");
+
+      const conditions: any[] = [
+        { first_name: { [Op.iLike]: `%${search}%` } },
+        { last_name: { [Op.iLike]: `%${search}%` } },
+        { email: { [Op.iLike]: `%${search}%` } },
+        { phone_number: { [Op.iLike]: `%${search}%` } },
       ];
+
+      const words = search.split(/\s+/).filter(Boolean);
+      if (words.length >= 2) {
+        conditions.push({
+          [Op.and]: words.map(word => ({
+            [Op.or]: [
+              { first_name: { [Op.iLike]: `%${word}%` } },
+              { last_name: { [Op.iLike]: `%${word}%` } },
+            ]
+          }))
+        });
+      }
+
+      whereClause[Op.or] = conditions;
     } else {
       if (queryDto.first_name)
         whereClause.first_name = { [Op.iLike]: `%${queryDto.first_name}%` };
@@ -218,9 +245,24 @@ export class StudentService {
     }
 
     if (queryDto.group_id === 'notnull') {
-      whereClause.group_id = { [Op.ne]: null };
+      const gsStudents = await GroupStudentModel.findAll({
+        where: { left_date: null },
+        attributes: ['student_id'],
+      });
+      const ids = [...new Set(gsStudents.map(gs => gs.student_id))];
+      if (ids.length > 0) {
+        whereClause.id = { [Op.in]: ids };
+      } else {
+        whereClause.id = { [Op.eq]: -1 };
+      }
     } else if (queryDto.group_id === '0') {
-      whereClause.group_id = null;
+      const allGsStudents = await GroupStudentModel.findAll({
+        attributes: ['student_id'],
+      });
+      const ids = [...new Set(allGsStudents.map(gs => gs.student_id))];
+      if (ids.length > 0) {
+        whereClause.id = { [Op.notIn]: ids };
+      }
     } else if (queryDto.group_id) {
       whereClause.group_id = parseInt(queryDto.group_id as string);
     }
@@ -401,12 +443,21 @@ export class StudentService {
     return { message: 'Parol muvaffaqiyatli yangilandi' };
   }
 
-  // ================= DELETE =================
+  // ================= DELETE (soft delete) =================
   async remove(id: number) {
     const student = await this.studentModel.findByPk(id);
     if (!student) throw new NotFoundException('Student topilmadi');
 
-    await student.destroy();
+    const groupStudentIds = (await GroupStudentModel.findAll({
+      where: { student_id: id },
+      attributes: ['id'],
+    })).map(gs => gs.id);
+
+    if (groupStudentIds.length > 0) {
+      await GroupStudentModel.destroy({ where: { id: groupStudentIds } });
+    }
+
+    await student.update({ isActive: false, group_id: null });
     return { message: 'Student muvaffaqiyatli o\'chirildi', id };
   }
 
@@ -510,7 +561,16 @@ export class StudentService {
     if (center_id) where.center_id = center_id;
     const students = await this.studentModel.findAll({
       where,
-      include: [{ model: GroupStudentModel, as: 'group_students', required: false }],
+      include: [{
+        model: GroupStudentModel,
+        as: 'group_students',
+        required: false,
+        include: [{
+          model: GroupModel,
+          attributes: ['id', 'name'],
+          required: false,
+        }],
+      }],
       attributes: { exclude: ['password'] },
     });
 

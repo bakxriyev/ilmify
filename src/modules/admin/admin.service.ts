@@ -116,7 +116,7 @@ export class AdminService {
     const hashedPassword = await bcrypt.hash(createAdminDto.password, 10);
 
     const defaultPermissions = role === AdminRole.ADMIN
-      ? JSON.stringify({ dashboard: false, students: false, teachers: false, parents: false, groups: false, rooms: false, payments: false, crm: false, notifications: false })
+      ? JSON.stringify({ dashboard: false, students: false, teachers: false, parents: false, groups: false, attendance: false, rooms: false, payments: false, crm: false, notifications: false, telegram: false, reports: false, admins: false, monitoring: false })
       : null;
 
     const admin = await this.adminModel.create({
@@ -190,10 +190,15 @@ export class AdminService {
       { key: 'teachers', label: "O'qituvchilar" },
       { key: 'parents', label: 'Ota-onalar' },
       { key: 'groups', label: 'Guruhlar' },
+      { key: 'attendance', label: 'Davomat' },
       { key: 'rooms', label: 'Xonalar' },
       { key: 'payments', label: "To'lovlar" },
       { key: 'crm', label: 'CRM' },
       { key: 'notifications', label: 'Bildirishnomalar' },
+      { key: 'telegram', label: 'Telegram Bot' },
+      { key: 'reports', label: 'Hisobotlar' },
+      { key: 'admins', label: 'Adminlar' },
+      { key: 'monitoring', label: 'Monitoring' },
     ];
   }
 

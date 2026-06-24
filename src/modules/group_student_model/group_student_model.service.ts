@@ -45,7 +45,6 @@ export class GroupStudentService {
         ? new Date(createGroupStudentDto.joined_date)
         : new Date();
       await existingRelation.update({ joined_date: joinedDate, left_date: null });
-      await this.studentModel.update({ group_id: createGroupStudentDto.group_id }, { where: { id: createGroupStudentDto.student_id } });
       return this.findOne(existingRelation.id);
     }
 
@@ -57,8 +56,6 @@ export class GroupStudentService {
       ...createGroupStudentDto,
       joined_date: joinedDate,
     });
-
-    await this.studentModel.update({ group_id: createGroupStudentDto.group_id }, { where: { id: createGroupStudentDto.student_id } });
 
     for (const type of [ChatRoomType.STUDENT, ChatRoomType.PARENT]) {
       await this.chatRoomModel.findOrCreate({
@@ -222,7 +219,6 @@ export class GroupStudentService {
     }
 
     await groupStudent.update({ left_date: new Date() });
-    await this.studentModel.update({ group_id: null }, { where: { id: studentId } });
   }
 
   async bulkAddStudentsToGroup(
@@ -256,8 +252,6 @@ export class GroupStudentService {
         results.push(existing);
       }
 
-      // Studentning group_id sini ham yangilaymiz
-      await this.studentModel.update({ group_id: groupId }, { where: { id: studentId } });
     }
 
     return results;
@@ -275,11 +269,6 @@ export class GroupStudentService {
       },
     );
 
-    // Studentning group_id sini tozalaymiz
-    await this.studentModel.update(
-      { group_id: null },
-      { where: { id: { [Op.in]: studentIds } } },
-    );
   }
 
   async findAllTrial() {

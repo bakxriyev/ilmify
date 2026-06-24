@@ -926,11 +926,10 @@ export class SmsService implements OnModuleInit {
     }
   }
 
-  // ─── Payment reminder cron ───────────────────────────────
 
   @Cron('0 9 * * *')
   async sendPaymentReminders() {
-    // This can be extended when integrated with PaymentService
+    
     this.logger.log('Daily 9AM payment reminder SMS cron fired (not yet integrated)');
   }
 }

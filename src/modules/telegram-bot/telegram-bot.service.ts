@@ -335,6 +335,19 @@ export class TelegramBotService {
     });
   }
 
+  private normalizePhone(phone: string): string {
+    if (!phone) return '';
+    let cleaned = phone.replace(/[^\d+]/g, '');
+    if (cleaned.startsWith('998') && !cleaned.startsWith('+')) {
+      cleaned = '+' + cleaned;
+    } else if (cleaned.startsWith('8') && cleaned.length === 12) {
+      cleaned = '+998' + cleaned.substring(1);
+    } else if (cleaned.startsWith('8') && cleaned.length === 11) {
+      cleaned = '+998' + cleaned.substring(1);
+    }
+    return cleaned;
+  }
+
   async getStudentByPhone(centerId: number, phone_number: string): Promise<StudentModel | null> {
     return this.studentModel.findOne({
       where: { phone_number, center_id: centerId },
@@ -344,8 +357,18 @@ export class TelegramBotService {
 
   async verifyPassword(centerId: number, phone_number: string, password: string): Promise<{ success: boolean; student?: any }> {
     try {
+      const normalizedPhone = this.normalizePhone(phone_number);
+      const searchPatterns = [
+        normalizedPhone,
+        normalizedPhone.replace(/^\+/, ''),
+        normalizedPhone.replace(/^\+998/, '998'),
+      ].filter(Boolean);
+
       const student = await this.studentModel.findOne({
-        where: { phone_number: String(phone_number).trim(), center_id: centerId },
+        where: {
+          phone_number: { [Op.in]: searchPatterns },
+          center_id: centerId,
+        },
         attributes: ['id', 'first_name', 'last_name', 'phone_number', 'center_id', 'password'],
         raw: true,
       });
@@ -364,8 +387,18 @@ export class TelegramBotService {
   }
 
   async checkPhone(centerId: number, phone: string): Promise<{ exists: boolean; student?: any }> {
+    const normalizedPhone = this.normalizePhone(phone);
+    const searchPatterns = [
+      normalizedPhone,
+      normalizedPhone.replace(/^\+/, ''),
+      normalizedPhone.replace(/^\+998/, '998'),
+    ].filter(Boolean);
+
     const student = await this.studentModel.findOne({
-      where: { phone_number: phone, center_id: centerId },
+      where: {
+        phone_number: { [Op.in]: searchPatterns },
+        center_id: centerId,
+      },
       attributes: ['id', 'first_name', 'last_name', 'center_id'],
     });
     if (!student) return { exists: false };

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/sequelize';
 import { Op, Sequelize, WhereOptions } from 'sequelize';
 import { QueryTypes } from 'sequelize';
@@ -14,11 +14,15 @@ import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { NotificationService } from '../notification/notification.service';
 import { AuditService } from '../audit/audit.service';
 import { CacheService } from '../../services/cache.service';
+import { TelegramChatModel } from '../telegram-bot/entities/telegram-chat.entity';
+import axios from 'axios';
 
 const monthNames = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'];
 
 @Injectable()
 export class PaymentService {
+  private readonly logger = new Logger(PaymentService.name);
+
   constructor(
     @InjectModel(PaymentModel) private paymentModel: typeof PaymentModel,
     @InjectModel(StudentModel) private studentModel: typeof StudentModel,
@@ -27,6 +31,7 @@ export class PaymentService {
     @InjectModel(GroupLessonModel) private groupLessonModel: typeof GroupLessonModel,
     @InjectModel(ParentStudentModel) private parentStudentModel: typeof ParentStudentModel,
     @InjectModel(ParentModel) private parentModel: typeof ParentModel,
+    @InjectModel(TelegramChatModel) private telegramChatModel: typeof TelegramChatModel,
     private notificationService: NotificationService,
     private auditService: AuditService,
     private cacheService: CacheService,
@@ -93,6 +98,11 @@ export class PaymentService {
     });
 
     this.cacheService.del(`cache:${centerId || 'global'}:/payments`);
+
+    // Send Telegram notification
+    this.notifyTelegramOnPayment(payment, student, 'created').catch(err =>
+      this.logger.error(`Failed to send telegram notification: ${err.message}`)
+    );
 
     return this.paymentModel.findByPk(payment.id, {
       include: [
@@ -566,12 +576,23 @@ export class PaymentService {
 
     this.cacheService.del(`cache:${payment.center_id || 'global'}:/payments`);
 
-    return this.paymentModel.findByPk(id, {
+    const updatedPayment = await this.paymentModel.findByPk(id, {
       include: [
         { model: StudentModel, attributes: ['id', 'first_name', 'last_name'] },
         { model: GroupModel, attributes: ['id', 'name'] },
       ],
     });
+
+    // Send Telegram notification if status changed
+    const student = await this.studentModel.findByPk(payment.student_id);
+    if ((newStatus === PaymentStatus.PAID && oldStatus !== PaymentStatus.PAID) ||
+        (newStatus === PaymentStatus.PARTIAL && oldStatus !== PaymentStatus.PARTIAL)) {
+      this.notifyTelegramOnPayment(updatedPayment, student, 'updated').catch(err =>
+        this.logger.error(`Failed to send telegram notification: ${err.message}`)
+      );
+    }
+
+    return updatedPayment;
   }
 
   async remove(id: number, user?: any) {
@@ -1047,5 +1068,126 @@ export class PaymentService {
       paid_total: paidPayments.reduce((sum, p) => sum + (p.amount || 0), 0),
       student_groups: activeGroups,
     };
+  }
+
+  private async notifyTelegramOnPayment(payment: any, student: any, action: 'created' | 'updated') {
+    try {
+      if (!payment || !student) return;
+
+      const studentId = Number(payment.student_id || student.id);
+      const centerId = payment.center_id || student.center_id;
+
+      // Student Telegram chat topish
+      const chat = await this.telegramChatModel.findOne({
+        where: { student_id: studentId, center_id: centerId },
+      });
+
+      const monthLabel = monthNames[Number(payment.month) - 1] || payment.month;
+      const amount = Number(payment.amount) || 0;
+      const paymentStatus = payment.status;
+
+      // Qolgan qarzdorlikni hisoblash
+      let remainingDebt = 0;
+      try {
+        const overview = await this.getStudentsOverview(payment.month, payment.year, centerId);
+        const entry = overview.find((o: any) => Number(o.student.id) === studentId);
+        if (entry) {
+          remainingDebt = entry.debt || 0;
+        }
+      } catch (e) {
+        // Agar hisoblashda xatolik bo'lsa, payment ma'lumotidan foydalanamiz
+        const monthlyPrice = Number(payment.group?.monthly_price) || 0;
+        remainingDebt = Math.max(0, monthlyPrice - amount);
+      }
+
+      let message = '';
+      let notifTitle = '';
+      let notifDesc = '';
+
+      if (paymentStatus === PaymentStatus.PAID) {
+        message =
+          `✅ <b>To'lov qabul qilindi!</b>\n\n` +
+          `👤 Student: ${student.first_name} ${student.last_name || ''}\n` +
+          `📚 Guruh: ${payment.group?.name || 'N/A'}\n` +
+          `📅 Oy: ${monthLabel} ${payment.year}\n` +
+          `💰 To'lov: ${amount.toLocaleString()} so'm\n` +
+          `✅ Holat: To'liq to'langan\n\n` +
+          `✨ ${monthLabel} oyi uchun barcha qarzdorlik yopildi. Rahmat!`;
+
+        notifTitle = `✅ To'lov qabul qilindi — ${monthLabel} ${payment.year}`;
+        notifDesc =
+          `${student.first_name}, ${monthLabel} oyi uchun ` +
+          `${amount.toLocaleString()} so'm to'lov qabul qilindi. Barcha qarzdorlik yopildi.`;
+
+        if (chat?.chat_id) {
+          const botConfig = await this.sequelize.model('TelegramBotModel').findOne({
+            where: { center_id: centerId },
+          }) as any;
+
+          if (botConfig?.bot_token && botConfig?.is_active) {
+            try {
+              await axios.post(
+                `https://api.telegram.org/bot${botConfig.bot_token}/sendMessage`,
+                { chat_id: chat.chat_id, text: message, parse_mode: 'HTML' },
+                { timeout: 10000 },
+              );
+            } catch (err: any) {
+              this.logger.error(`Failed to send telegram message: ${err.message}`);
+            }
+          }
+        }
+      } else if (paymentStatus === PaymentStatus.PARTIAL) {
+        message =
+          `🟡 <b>Qisman to'lov qabul qilindi</b>\n\n` +
+          `👤 Student: ${student.first_name} ${student.last_name || ''}\n` +
+          `📚 Guruh: ${payment.group?.name || 'N/A'}\n` +
+          `📅 Oy: ${monthLabel} ${payment.year}\n` +
+          `💰 To'langan: ${amount.toLocaleString()} so'm\n` +
+          `⚠️ Qolgan qarz: ${remainingDebt.toLocaleString()} so'm\n\n` +
+          `Iltimos, qolgan qarzdorlikni ham to'lab qo'ying!`;
+
+        notifTitle = `🟡 Qisman to'lov — ${monthLabel} ${payment.year}`;
+        notifDesc =
+          `${student.first_name}, ${monthLabel} oyi uchun ` +
+          `${amount.toLocaleString()} so'm qisman to'lov qabul qilindi. ` +
+          `Qolgan qarz: ${remainingDebt.toLocaleString()} so'm.`;
+
+        if (chat?.chat_id) {
+          const botConfig = await this.sequelize.model('TelegramBotModel').findOne({
+            where: { center_id: centerId },
+          }) as any;
+
+          if (botConfig?.bot_token && botConfig?.is_active) {
+            try {
+              await axios.post(
+                `https://api.telegram.org/bot${botConfig.bot_token}/sendMessage`,
+                { chat_id: chat.chat_id, text: message, parse_mode: 'HTML' },
+                { timeout: 10000 },
+              );
+            } catch (err: any) {
+              this.logger.error(`Failed to send telegram message: ${err.message}`);
+            }
+          }
+        }
+      }
+
+      // In-app notification yuborish
+      if (this.notificationService && notifTitle) {
+        try {
+          await this.notificationService.send({
+            student_id: studentId,
+            title: notifTitle,
+            description: notifDesc,
+            link: '/payments',
+            sender_type: 'system',
+            center_id: centerId,
+          } as any);
+        } catch (e) {
+          this.logger.error(`Failed to send in-app notification: ${(e as any).message}`);
+        }
+      }
+    } catch (err: any) {
+      this.logger.error(`Error in notifyTelegramOnPayment: ${err.message}`);
+    }
   }
 }

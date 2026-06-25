@@ -109,7 +109,7 @@ async create(createGroupDto: CreateGroupDto, center_id?: number): Promise<GroupM
 
 
   async findAll(queryDto: QueryGroupDto, center_id?: number) {
-    const { page = 1, limit = 10, teacher_id, support_teacher_id, name, include } = queryDto;
+    const { page = 1, limit = 10, teacher_id, support_teacher_id, name, day, parity, start_time_from, start_time_to, include } = queryDto;
     const offset = (page - 1) * limit;
 
     const whereClause: any = {};
@@ -119,6 +119,54 @@ async create(createGroupDto: CreateGroupDto, center_id?: number): Promise<GroupM
     if (name) whereClause.name = { [Op.iLike]: `%${name}%` };
 
     const includeArray = this.buildInclude(include);
+
+    // Agar day, parity yoki time bo'yicha filter kelsa, lessons LEFT JOIN orqali filter qilamiz
+    const lessonWhere: any = {};
+    let hasLessonFilter = false;
+
+    if (day !== undefined && day !== null && day !== '') {
+      const dayNum = parseInt(day, 10);
+      if (!isNaN(dayNum) && dayNum >= 0 && dayNum <= 6) {
+        lessonWhere[Op.and as any] = lessonWhere[Op.and as any] || [];
+        lessonWhere[Op.and as any].push(
+          Sequelize.where(
+            Sequelize.fn('EXTRACT', Sequelize.literal('DOW FROM "lessons"."date"')),
+            Op.eq,
+            dayNum
+          )
+        );
+        hasLessonFilter = true;
+      }
+    }
+
+    if (parity) {
+      lessonWhere.parity = parity;
+      hasLessonFilter = true;
+    }
+
+    if (start_time_from || start_time_to) {
+      const timeWhere: any = {};
+      if (start_time_from) timeWhere[Op.gte] = start_time_from;
+      if (start_time_to) timeWhere[Op.lte] = start_time_to;
+      lessonWhere.start_time = timeWhere;
+      hasLessonFilter = true;
+    }
+
+    if (hasLessonFilter) {
+      const lessonInclude = includeArray.find((i: any) => i.as === 'lessons');
+      if (lessonInclude) {
+        lessonInclude.where = lessonWhere;
+        lessonInclude.required = true;
+      } else {
+        includeArray.push({
+          model: GroupLessonModel,
+          as: 'lessons',
+          where: lessonWhere,
+          attributes: ['id', 'date', 'time', 'parity', 'start_time', 'end_time'],
+          required: true,
+        });
+      }
+    }
 
     const { count, rows } = await this.groupModel.findAndCountAll({
   where: whereClause,

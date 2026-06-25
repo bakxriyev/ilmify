@@ -33,10 +33,25 @@ export class QueryGroupDto {
   @IsString()
   name?: string;
 
-  @ApiPropertyOptional({ description: 'Filter by day', example: 'Monday' })
+  @ApiPropertyOptional({ description: 'Filter by day of week (0-6, 0=Sunday)', example: '1' })
   @IsOptional()
   @IsString()
   day?: string;
+
+  @ApiPropertyOptional({ description: "Filter by parity: 'odd' | 'even' | 'both'", example: 'odd' })
+  @IsOptional()
+  @IsString()
+  parity?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by start time from (HH:mm)', example: '08:00' })
+  @IsOptional()
+  @IsString()
+  start_time_from?: string;
+
+  @ApiPropertyOptional({ description: 'Filter by start time to (HH:mm)', example: '18:00' })
+  @IsOptional()
+  @IsString()
+  start_time_to?: string;
 
   @ApiPropertyOptional({ 
     description: 'Include relations', 

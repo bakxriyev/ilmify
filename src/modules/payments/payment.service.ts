@@ -99,17 +99,19 @@ export class PaymentService {
 
     this.cacheService.del(`cache:${centerId || 'global'}:/payments`);
 
-    // Send Telegram notification
-    this.notifyTelegramOnPayment(payment, student, 'created').catch(err =>
-      this.logger.error(`Failed to send telegram notification: ${err.message}`)
-    );
-
-    return this.paymentModel.findByPk(payment.id, {
+    const fullPayment = await this.paymentModel.findByPk(payment.id, {
       include: [
         { model: StudentModel, attributes: ['id', 'first_name', 'last_name', 'phone_number'] },
         { model: GroupModel, attributes: ['id', 'name', 'monthly_price'] },
       ],
     });
+
+    // Send Telegram notification (after re-fetch so group data is included)
+    this.notifyTelegramOnPayment(fullPayment, student, 'created').catch(err =>
+      this.logger.error(`Failed to send telegram notification: ${err.message}`)
+    );
+
+    return fullPayment;
   }
 
   async findAll(group_id?: number, student_id?: number, month?: number, year?: number, status?: string, payment_type?: string, date_from?: string, date_to?: string, center_id?: number) {
@@ -1105,12 +1107,14 @@ export class PaymentService {
       let notifDesc = '';
 
       if (paymentStatus === PaymentStatus.PAID) {
+        const paidDate = payment.paid_at ? new Date(payment.paid_at).toLocaleDateString('uz-UZ', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
         message =
           `✅ <b>To'lov qabul qilindi!</b>\n\n` +
           `👤 Student: ${student.first_name} ${student.last_name || ''}\n` +
           `📚 Guruh: ${payment.group?.name || 'N/A'}\n` +
           `📅 Oy: ${monthLabel} ${payment.year}\n` +
           `💰 To'lov: ${amount.toLocaleString()} so'm\n` +
+          `📆 To'lov sanasi: ${paidDate || 'N/A'}\n` +
           `✅ Holat: To'liq to'langan\n\n` +
           `✨ ${monthLabel} oyi uchun barcha qarzdorlik yopildi. Rahmat!`;
 
@@ -1137,12 +1141,14 @@ export class PaymentService {
           }
         }
       } else if (paymentStatus === PaymentStatus.PARTIAL) {
+        const paidDate = payment.paid_at ? new Date(payment.paid_at).toLocaleDateString('uz-UZ', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
         message =
           `🟡 <b>Qisman to'lov qabul qilindi</b>\n\n` +
           `👤 Student: ${student.first_name} ${student.last_name || ''}\n` +
           `📚 Guruh: ${payment.group?.name || 'N/A'}\n` +
           `📅 Oy: ${monthLabel} ${payment.year}\n` +
           `💰 To'langan: ${amount.toLocaleString()} so'm\n` +
+          `📆 To'lov sanasi: ${paidDate || 'N/A'}\n` +
           `⚠️ Qolgan qarz: ${remainingDebt.toLocaleString()} so'm\n\n` +
           `Iltimos, qolgan qarzdorlikni ham to'lab qo'ying!`;
 

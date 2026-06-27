@@ -43,10 +43,11 @@ export class GroupLessonService {
     unitId: number | null,
     date: Date,
     time: string,
-    parity: 'odd' | 'even',
+    parity: 'odd' | 'even' | 'everyday',
     room_id?: number,
     start_time?: string,
     end_time?: string,
+    weekdays?: 'mon-fri' | 'mon-sat',
   ) {
     const group = await this.groupModel.findByPk(groupId);
     if (!group) throw new NotFoundException('Group topilmadi');
@@ -65,6 +66,7 @@ export class GroupLessonService {
       start_time: start_time || time,
       end_time: end_time || null,
       parity,
+      weekdays: (parity === 'everyday' ? weekdays : null) || null,
     });
   }
 

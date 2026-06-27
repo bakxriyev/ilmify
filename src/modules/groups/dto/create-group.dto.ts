@@ -53,10 +53,15 @@ export class CreateGroupDto {
   @IsString()
   end_time?: string;
 
-  @ApiProperty({ description: 'Toq/juft hafta', example: 'odd', enum: ['odd','even','both'], required: false })
+  @ApiProperty({ description: 'Toq/juft/kunlik', example: 'odd', enum: ['odd','even','everyday'], required: false })
   @IsOptional()
-  @IsEnum(['odd','even','both'])
-  parity?: 'odd' | 'even' | 'both';
+  @IsEnum(['odd','even','everyday'])
+  parity?: 'odd' | 'even' | 'everyday';
+
+  @ApiProperty({ description: 'Har kunlik uchun: mon-fri (Dush-Juma) yoki mon-sat (Dush-Shanba)', example: 'mon-fri', enum: ['mon-fri', 'mon-sat'], required: false })
+  @IsOptional()
+  @IsString()
+  weekdays?: 'mon-fri' | 'mon-sat';
 
   @ApiProperty({ description: 'Oylik tolov narxi', example: 200000, required: false })
   @IsOptional()

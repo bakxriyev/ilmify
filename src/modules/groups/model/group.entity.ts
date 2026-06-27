@@ -52,6 +52,12 @@ export class GroupModel extends Model {
   @Column({ type: DataType.BIGINT, allowNull: true, defaultValue: 0 })
   kp: number;
 
+  @Column({ type: DataType.ENUM('odd', 'even', 'everyday'), allowNull: true })
+  parity: 'odd' | 'even' | 'everyday';
+
+  @Column({ type: DataType.STRING, allowNull: true })
+  weekdays: string;
+
   // ✅ Timestamp columns (explicit definition is optional, but recommended)
   @CreatedAt
   @Column({ type: DataType.DATE, allowNull: false, defaultValue: DataType.NOW })

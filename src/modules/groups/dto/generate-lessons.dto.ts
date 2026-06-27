@@ -14,10 +14,15 @@ export class GenerateLessonsDto {
   @IsString()
   time: string;
 
-  @ApiProperty({ description: 'Kunlar: odd (1,3,5) yoki even (2,4,6)' })
+  @ApiProperty({ description: 'Kunlar: odd (1,3,5), even (2,4,6), everyday (har kunlik)' })
   @IsString()
-  @IsIn(['odd', 'even', 'both'])
+  @IsIn(['odd', 'even', 'everyday'])
   parity: string;
+
+  @ApiPropertyOptional({ description: 'Har kunlik uchun: mon-fri (Dush-Juma) yoki mon-sat (Dush-Shanba)', enum: ['mon-fri', 'mon-sat'] })
+  @IsOptional()
+  @IsString()
+  weekdays?: 'mon-fri' | 'mon-sat';
 
   @ApiPropertyOptional({ description: 'Boshlanish vaqti' })
   @IsOptional()

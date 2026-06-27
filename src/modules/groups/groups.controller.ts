@@ -339,10 +339,11 @@ async generateLessons(
     dto.start_date,
     dto.duration_months,
     dto.time,
-    dto.parity as 'odd' | 'even' | 'both',
+    dto.parity as 'odd' | 'even' | 'everyday',
     dto.room_id,
     dto.start_time,
     dto.end_time,
+    dto.weekdays,
   );
 }
 }

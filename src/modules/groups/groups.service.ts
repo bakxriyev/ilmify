@@ -8,7 +8,7 @@ import { StudentModel } from '../students/model/student.entity';
 import { CreateGroupDto, UpdateGroupDto } from './dto';
 import { QueryGroupDto } from './dto/query-group.dto';
 import { Op } from 'sequelize';
-import * as dayjs from 'dayjs';
+import dayjs from 'dayjs';
 import { Sequelize } from 'sequelize-typescript';
 import { GroupLessonModel } from '../group-lesson/entities/group-lesson.entity'
 import { ChatRoomModel, ChatRoomType } from '../chat/entities/chat-room.entity';
@@ -98,8 +98,15 @@ async create(createGroupDto: CreateGroupDto, center_id?: number): Promise<GroupM
       createGroupDto.parity,
       createGroupDto.room_id,
       createGroupDto.start_time,
-      createGroupDto.end_time
+      createGroupDto.end_time,
+      createGroupDto.weekdays,
     );
+
+    // Guruhga parity va weekdays ni saqlaymiz
+    await group.update({
+      parity: createGroupDto.parity,
+      weekdays: createGroupDto.weekdays || null,
+    } as any);
   }
 
   // Yaratilgan guruhni to'liq ma'lumotlar bilan qaytarish (lessons bilan)
@@ -440,14 +447,17 @@ async generateLessons(
   startDate: string,
   durationMonths: number,
   time: string,
-  parity: 'odd' | 'even' | 'both',
+  parity: 'odd' | 'even' | 'everyday',
   room_id?: number,
   start_time?: string,
   end_time?: string,
+  weekdays?: 'mon-fri' | 'mon-sat',
 ) {
   const group = await this.groupModel.findByPk(groupId);
   if (!group) throw new NotFoundException('Guruh topilmadi');
-  const lessons = await this.createLessons(groupId, startDate, durationMonths, time, parity, room_id, start_time, end_time);
+  const lessons = await this.createLessons(groupId, startDate, durationMonths, time, parity, room_id, start_time, end_time, weekdays);
+  // Guruhga parity va weekdays ni saqlaymiz
+  await group.update({ parity, weekdays: weekdays || null } as any);
   return { created: lessons.length };
 }
 
@@ -456,38 +466,46 @@ async createLessons(
   startDate: string,
   durationMonths: number,
   time: string,
-  parity: 'odd' | 'even' | 'both',
+  parity: 'odd' | 'even' | 'everyday',
   room_id?: number,
   start_time?: string,
   end_time?: string,
+  weekdays?: 'mon-fri' | 'mon-sat',
 ) {
   const lessons: any[] = [];
-  const start = new Date(startDate);
-  const endDate = new Date(start);
-  endDate.setMonth(endDate.getMonth() + durationMonths);
+  const start = dayjs(startDate);
+  const endDate = start.add(durationMonths, 'month');
 
   // Kalendarda hafta Yakshanba bilan boshlanadi (1-kun)
   // dayjs().day() : 0=Yak, 1=Dush, 2=Sesh, 3=Chor, 4=Pay, 5=Juma, 6=Shanba
   //
   // Toq kunlar -> Dushanba(1), Chorshanba(3), Juma(5)
   // Juft kunlar -> Seshanba(2), Payshanba(4), Shanba(6)
+  // Har kunlik (mon-fri) -> Dushanba(1) dan Juma(5) gacha
+  // Har kunlik (mon-sat) -> Dushanba(1) dan Shanba(6) gacha
   let selectedDays: number[];
   if (parity === 'odd') {
     selectedDays = [1, 3, 5];
   } else if (parity === 'even') {
     selectedDays = [2, 4, 6];
   } else {
-    selectedDays = [1, 2, 3, 4, 5, 6];
+    // everyday / har kunlik
+    if (weekdays === 'mon-fri') {
+      selectedDays = [1, 2, 3, 4, 5];
+    } else {
+      // default: mon-sat (Dushanbadan Shanbagacha)
+      selectedDays = [1, 2, 3, 4, 5, 6];
+    }
   }
 
-  let current = new Date(start);
+  let current = start;
 
-  while (current <= endDate) {
-    const jsDay = current.getDay();
+  while (current.isBefore(endDate)) {
+    const jsDay = current.day();
     
     // Yakshanba skip
     if (jsDay === 0) {
-      current.setDate(current.getDate() + 1);
+      current = current.add(1, 'day');
       continue;
     }
 
@@ -495,16 +513,17 @@ async createLessons(
     if (selectedDays.includes(jsDay)) {
       lessons.push({
         group_id: groupId,
-        date: new Date(current),
+        date: current.toDate(),
         time,
         start_time: start_time || time,
         end_time: end_time || null,
         parity: parity,
+        weekdays: (parity === 'everyday' ? weekdays : null) || null,
         room_id: room_id || null,
       });
     }
 
-    current.setDate(current.getDate() + 1);
+    current = current.add(1, 'day');
   }
 
   if (lessons.length) {

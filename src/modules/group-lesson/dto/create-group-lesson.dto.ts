@@ -34,7 +34,12 @@ export class CreateGroupLessonDto {
   @IsString()
   end_time?: string;
 
-  @ApiProperty({ description: 'Toq/juft hafta', enum: ['odd', 'even'] })
-  @IsEnum(['odd', 'even'])
-  parity: 'odd' | 'even';
+  @ApiProperty({ description: 'Toq/juft/kunlik hafta', enum: ['odd', 'even', 'everyday'] })
+  @IsEnum(['odd', 'even', 'everyday'])
+  parity: 'odd' | 'even' | 'everyday';
+
+  @ApiPropertyOptional({ description: 'Har kunlik uchun: mon-fri (Dush-Juma) yoki mon-sat (Dush-Shanba)', enum: ['mon-fri', 'mon-sat'] })
+  @IsOptional()
+  @IsString()
+  weekdays?: 'mon-fri' | 'mon-sat';
 }

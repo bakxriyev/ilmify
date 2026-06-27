@@ -262,7 +262,9 @@ export class PaymentService {
 
     const relationsWithJoinAfterStart = relations.filter(r => {
       const gid = Number(r.group_id);
-      return totalLessonsPerGroup.get(gid) > 0 && new Date(r.joined_date) > monthStart;
+      if (!(totalLessonsPerGroup.get(gid) > 0)) return false;
+      const jd = new Date(r.joined_date);
+      return Date.UTC(jd.getFullYear(), jd.getMonth(), jd.getDate()) > Date.UTC(year, month - 1, 1);
     });
     const remainingLessonsMap = new Map<string, number>();
     if (relationsWithJoinAfterStart.length > 0) {
@@ -296,7 +298,8 @@ export class PaymentService {
       let effectivePrice = monthlyPrice;
       if (totalLessons > 0 && relation) {
         const joinDate = new Date(relation.joined_date);
-        if (joinDate > monthStart) {
+        // Date-only comparison: 1-sanada qo'shilgan bo'lsa to'liq to'lov
+        if (Date.UTC(joinDate.getFullYear(), joinDate.getMonth(), joinDate.getDate()) > Date.UTC(year, month - 1, 1)) {
           const rlKey = `${groupId}-${joinDate.getTime()}`;
           const remainingLessons = remainingLessonsMap.get(rlKey) || 0;
           if (remainingLessons > 0) {
@@ -466,7 +469,8 @@ export class PaymentService {
     const studentsNeedingProration = students.filter(s => {
       if (totalLessonsInMonth === 0) return false;
       const joinDate = joinDateMap.get(Number(s.id));
-      return joinDate && joinDate > monthStart;
+      if (!joinDate) return false;
+      return Date.UTC(joinDate.getFullYear(), joinDate.getMonth(), joinDate.getDate()) > Date.UTC(targetYear, targetMonth - 1, 1);
     });
     const remainingLessonsMap = new Map<number, number>();
     if (studentsNeedingProration.length > 0) {
@@ -489,7 +493,7 @@ export class PaymentService {
       let effectivePrice = monthlyPrice;
       if (totalLessonsInMonth > 0 && status !== PaymentStatus.PAID) {
         const joinDate = joinDateMap.get(Number(s.id));
-        if (joinDate && joinDate > monthStart) {
+        if (joinDate && Date.UTC(joinDate.getFullYear(), joinDate.getMonth(), joinDate.getDate()) > Date.UTC(targetYear, targetMonth - 1, 1)) {
           const remainingLessons = remainingLessonsMap.get(Number(s.id)) || 0;
           if (remainingLessons > 0) {
             const pricePerLesson = monthlyPrice / totalLessonsInMonth;
@@ -710,7 +714,7 @@ export class PaymentService {
         let amount = monthlyPrice;
         if (totalLessonsInMonth > 0 && rel.joined_date) {
           const joinDate = new Date(rel.joined_date);
-          if (joinDate > monthStart) {
+          if (Date.UTC(joinDate.getFullYear(), joinDate.getMonth(), joinDate.getDate()) > Date.UTC(year, month - 1, 1)) {
             const remainingLessons = await this.groupLessonModel.count({
               where: { group_id: group.id, date: { [Op.gte]: joinDate, [Op.lt]: monthEnd } },
             });
@@ -956,7 +960,7 @@ export class PaymentService {
         let effectivePrice = 0;
         if (totalLessons > 0) {
           effectivePrice = monthlyPrice;
-          if (joinedDate > monthStart) {
+          if (Date.UTC(joinedDate.getFullYear(), joinedDate.getMonth(), joinedDate.getDate()) > Date.UTC(year, month - 1, 1)) {
             const remainingLessons = await this.groupLessonModel.count({
               where: { group_id: groupId, date: { [Op.gte]: joinedDate, [Op.lt]: monthEnd } },
             });

@@ -38,7 +38,7 @@ export class QueryGroupDto {
   @IsString()
   day?: string;
 
-  @ApiPropertyOptional({ description: "Filter by parity: 'odd' | 'even' | 'both'", example: 'odd' })
+  @ApiPropertyOptional({ description: "Filter by parity: 'odd' | 'even' | 'everyday'", example: 'odd' })
   @IsOptional()
   @IsString()
   parity?: string;

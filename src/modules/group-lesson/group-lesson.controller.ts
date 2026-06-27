@@ -40,6 +40,7 @@ export class GroupLessonController {
       body.room_id,
       body.start_time,
       body.end_time,
+      body.weekdays,
     );
   }
 

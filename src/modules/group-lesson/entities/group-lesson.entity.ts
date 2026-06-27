@@ -42,8 +42,11 @@ export class GroupLessonModel extends Model<GroupLessonModel> {
   @Column({ type: DataType.TIME, allowNull: true })
   end_time: string;
 
-  @Column({ type: DataType.ENUM('odd', 'even'), allowNull: false })
-  parity: 'odd' | 'even';
+  @Column({ type: DataType.ENUM('odd', 'even', 'everyday'), allowNull: false })
+  parity: 'odd' | 'even' | 'everyday';
+
+  @Column({ type: DataType.STRING, allowNull: true })
+  weekdays: string;
 
   @BelongsTo(() => GroupModel, 'group_id')
   group: GroupModel;

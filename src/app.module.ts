@@ -87,6 +87,9 @@ import { AuditLogModel } from './modules/audit/entities/audit-log.entity';
 import { RedisModule } from './services/redis.module';
 import { CacheModule } from './services/cache.module';
 import { AiModule } from './modules/ai/ai.module';
+import { TeacherAttendanceModule } from './modules/teacher-attendance/teacher-attendance.module';
+import { TeacherAttendanceLocationModel } from './modules/teacher-attendance/model/teacher-attendance-location.model';
+import { TeacherAttendanceModel } from './modules/teacher-attendance/model/teacher-attendance.model';
 
 @Module({
   imports: [
@@ -113,7 +116,7 @@ import { AiModule } from './modules/ai/ai.module';
              username: config.get<string>('databaseConfig.user'),
              password: config.get<string>('databaseConfig.password'),
              database: config.get<string>('databaseConfig.dbname'),
-             models: [TariffModel, TeacherModel,LevelModel,AdminModel,UserDeviceModel,GroupLessonModel,RedoIncorrectTaskModel, StudentModel,GroupModel,GroupStudentModel,AttendanceModel,UnitModel,ExerciseModel,TaskModel,StudentAnswerModel,ExerciseResultModel,VocabModel,VocabAnswerModel,VocabResultModel,UnitResultModel,StudentCoinsModel,TeacherCoinLogModel,TaskCoinLogModel,ChatRoomModel,ChatMessageModel,MessageStatusModel,ParentModel,ParentStudentModel,RoomModel,PaymentModel,EducationCenterModel,CenterBranchModel,LeadModel,LeadSourceModel,TelegramSettingsModel,TelegramBotModel,TelegramChatModel,TelegramMessageModel,TelegramTemplateModel,TelegramBroadcastModel,AutoNotificationConfigModel,AutoNotificationLogModel,SmsLogModel,SmsTemplateModel,CenterApplicationModel,AuditLogModel],
+             models: [TariffModel, TeacherModel,LevelModel,AdminModel,UserDeviceModel,GroupLessonModel,RedoIncorrectTaskModel, StudentModel,GroupModel,GroupStudentModel,AttendanceModel,UnitModel,ExerciseModel,TaskModel,StudentAnswerModel,ExerciseResultModel,VocabModel,VocabAnswerModel,VocabResultModel,UnitResultModel,StudentCoinsModel,TeacherCoinLogModel,TaskCoinLogModel,ChatRoomModel,ChatMessageModel,MessageStatusModel,ParentModel,ParentStudentModel,RoomModel,PaymentModel,EducationCenterModel,CenterBranchModel,LeadModel,LeadSourceModel,TelegramSettingsModel,TelegramBotModel,TelegramChatModel,TelegramMessageModel,TelegramTemplateModel,TelegramBroadcastModel,AutoNotificationConfigModel,AutoNotificationLogModel,SmsLogModel,SmsTemplateModel,CenterApplicationModel,AuditLogModel,TeacherAttendanceLocationModel,TeacherAttendanceModel],
              sync: { alter: !isProd },
              synchronize: !isProd,
              logging: isProd ? false : console.log,
@@ -181,6 +184,7 @@ import { AiModule } from './modules/ai/ai.module';
     RedisModule,
     CacheModule,
     AiModule,
+    TeacherAttendanceModule,
   ],
   controllers: [
   ],

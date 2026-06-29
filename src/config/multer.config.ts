@@ -30,6 +30,8 @@ const getDestination = (req: any, file: any, cb: any) => {
     folder += 'admins';
   } else if (url.includes('groups')) {
     folder += 'groups';
+  } else if (url.includes('teacher-attendance') || url.includes('check-in')) {
+    folder += 'teacher-attendance';
   } else if (url.includes('education-centers') || url.includes('centers')) {
     folder += 'centers';
   } else {

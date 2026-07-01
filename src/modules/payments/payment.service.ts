@@ -481,7 +481,7 @@ export class PaymentService {
     const studentIds = groupStudents.map(gs => gs.student_id);
     const students = await this.studentModel.findAll({
       where: { id: studentIds },
-      attributes: ['id', 'first_name', 'last_name', 'phone_number'],
+      attributes: ['id', 'first_name', 'last_name', 'phone_number', 'password'],
     });
 
     const payments = await this.paymentModel.findAll({
@@ -566,7 +566,7 @@ export class PaymentService {
       const paymentType = payment?.payment_type || null;
 
       return {
-        student: { id: s.id, first_name: s.first_name, last_name: s.last_name, phone_number: s.phone_number },
+        student: { id: s.id, first_name: s.first_name, last_name: s.last_name, phone_number: s.phone_number, password: (s as any).password },
         group: { id: groupId, name: group?.name || '', monthly_price: monthlyPrice },
         payment: payment || null,
         payment_type: paymentType,
@@ -969,7 +969,7 @@ export class PaymentService {
 
   async getStudentDebts(studentId: number, center_id?: number) {
     const student = await this.studentModel.findByPk(studentId, {
-      attributes: ['id', 'first_name', 'last_name', 'phone_number', 'center_id'],
+      attributes: ['id', 'first_name', 'last_name', 'phone_number', 'password', 'center_id'],
     });
     if (!student) throw new NotFoundException('Student topilmadi');
     if (center_id && Number(student.center_id) !== center_id) {
@@ -1172,6 +1172,7 @@ export class PaymentService {
         first_name: student.first_name,
         last_name: student.last_name,
         phone_number: student.phone_number,
+        password: (student as any).password,
       },
       debts: debts.map(d => ({ ...d, month_name: monthNames[d.month - 1] })),
       paid_payments: paidPayments.map(p => ({ ...p, month_name: monthNames[p.month - 1] })),

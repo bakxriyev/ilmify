@@ -15,6 +15,7 @@ import { NotificationService } from '../notification/notification.service';
 import { AuditService } from '../audit/audit.service';
 import { CacheService } from '../../services/cache.service';
 import { TelegramChatModel } from '../telegram-bot/entities/telegram-chat.entity';
+import { EducationCenterModel } from '../education-centers/entities/education-center.entity';
 import axios from 'axios';
 
 const monthNames = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'];
@@ -32,6 +33,7 @@ export class PaymentService {
     @InjectModel(ParentStudentModel) private parentStudentModel: typeof ParentStudentModel,
     @InjectModel(ParentModel) private parentModel: typeof ParentModel,
     @InjectModel(TelegramChatModel) private telegramChatModel: typeof TelegramChatModel,
+    @InjectModel(EducationCenterModel) private centerModel: typeof EducationCenterModel,
     private notificationService: NotificationService,
     private auditService: AuditService,
     private cacheService: CacheService,
@@ -105,6 +107,19 @@ export class PaymentService {
         { model: GroupModel, attributes: ['id', 'name', 'monthly_price'] },
       ],
     });
+
+    // Update center balance
+    if (centerId && (payment.status === PaymentStatus.PAID || payment.status === PaymentStatus.PARTIAL)) {
+      try {
+        const center = await this.centerModel.findByPk(centerId);
+        if (center) {
+          const currentBalance = Number(center.balance) || 0;
+          await center.update({ balance: currentBalance + Number(payment.amount) });
+        }
+      } catch (err) {
+        this.logger.error(`Failed to update center balance: ${(err as any).message}`);
+      }
+    }
 
     // Send Telegram notification (after re-fetch so group data is included)
     this.notifyTelegramOnPayment(fullPayment, student, 'created').catch(err =>
@@ -550,14 +565,39 @@ export class PaymentService {
     const oldStatus = payment.status;
     const oldAmount = Number(payment.amount);
     
+    const newStatus = dto.status || oldStatus;
+    const newAmount = dto.amount !== undefined ? Number(dto.amount) : oldAmount;
+
+    // Update center balance
+    if (payment.center_id) {
+      try {
+        const center = await this.centerModel.findByPk(payment.center_id);
+        if (center) {
+          let balanceDiff = 0;
+          // Old payment effect
+          if (oldStatus === PaymentStatus.PAID || oldStatus === PaymentStatus.PARTIAL) {
+            balanceDiff -= oldAmount;
+          }
+          // New payment effect
+          if (newStatus === PaymentStatus.PAID || newStatus === PaymentStatus.PARTIAL) {
+            balanceDiff += newAmount;
+          }
+          if (balanceDiff !== 0) {
+            const currentBalance = Number(center.balance) || 0;
+            await center.update({ balance: currentBalance + balanceDiff });
+          }
+        }
+      } catch (err) {
+        this.logger.error(`Failed to update center balance: ${(err as any).message}`);
+      }
+    }
+
     await payment.update(dto);
     
     const adminName = user?.full_name || user?.name || 'Unknown';
     const adminId = user?.id || user?.sub || 0;
     const studentName = payment.student ? `${(payment.student as any).first_name} ${(payment.student as any).last_name}`.trim() : (payment as any).student_name || '';
     const monthLabel = monthNames[Number(payment.month) - 1] || payment.month;
-    const newAmount = dto.amount !== undefined ? Number(dto.amount) : oldAmount;
-    const newStatus = dto.status || oldStatus;
 
     this.auditService.log({
       admin_id: adminId,
@@ -614,6 +654,19 @@ export class PaymentService {
     const adminName = user?.full_name || user?.name || 'Unknown';
     const adminId = user?.id || user?.sub || 0;
     const amount = Number(payment.amount);
+
+    // Subtract from center balance
+    if (payment.center_id && (payment.status === PaymentStatus.PAID || payment.status === PaymentStatus.PARTIAL)) {
+      try {
+        const center = await this.centerModel.findByPk(payment.center_id);
+        if (center) {
+          const currentBalance = Number(center.balance) || 0;
+          await center.update({ balance: Math.max(0, currentBalance - amount) });
+        }
+      } catch (err) {
+        this.logger.error(`Failed to update center balance: ${(err as any).message}`);
+      }
+    }
 
     await payment.destroy();
 

@@ -90,6 +90,9 @@ import { AiModule } from './modules/ai/ai.module';
 import { TeacherAttendanceModule } from './modules/teacher-attendance/teacher-attendance.module';
 import { TeacherAttendanceLocationModel } from './modules/teacher-attendance/model/teacher-attendance-location.model';
 import { TeacherAttendanceModel } from './modules/teacher-attendance/model/teacher-attendance.model';
+import { ExpenseModule } from './modules/expenses/expense.module';
+import { ExpenseModel } from './modules/expenses/entities/expense.entity';
+import { ReportsModule } from './modules/reports/reports.module';
 
 @Module({
   imports: [
@@ -116,7 +119,7 @@ import { TeacherAttendanceModel } from './modules/teacher-attendance/model/teach
              username: config.get<string>('databaseConfig.user'),
              password: config.get<string>('databaseConfig.password'),
              database: config.get<string>('databaseConfig.dbname'),
-             models: [TariffModel, TeacherModel,LevelModel,AdminModel,UserDeviceModel,GroupLessonModel,RedoIncorrectTaskModel, StudentModel,GroupModel,GroupStudentModel,AttendanceModel,UnitModel,ExerciseModel,TaskModel,StudentAnswerModel,ExerciseResultModel,VocabModel,VocabAnswerModel,VocabResultModel,UnitResultModel,StudentCoinsModel,TeacherCoinLogModel,TaskCoinLogModel,ChatRoomModel,ChatMessageModel,MessageStatusModel,ParentModel,ParentStudentModel,RoomModel,PaymentModel,EducationCenterModel,CenterBranchModel,LeadModel,LeadSourceModel,TelegramSettingsModel,TelegramBotModel,TelegramChatModel,TelegramMessageModel,TelegramTemplateModel,TelegramBroadcastModel,AutoNotificationConfigModel,AutoNotificationLogModel,SmsLogModel,SmsTemplateModel,CenterApplicationModel,AuditLogModel,TeacherAttendanceLocationModel,TeacherAttendanceModel],
+              models: [TariffModel, TeacherModel,LevelModel,AdminModel,UserDeviceModel,GroupLessonModel,RedoIncorrectTaskModel,StudentModel,GroupModel,GroupStudentModel,AttendanceModel,UnitModel,ExerciseModel,TaskModel,StudentAnswerModel,ExerciseResultModel,VocabModel,VocabAnswerModel,VocabResultModel,UnitResultModel,StudentCoinsModel,TeacherCoinLogModel,TaskCoinLogModel,ChatRoomModel,ChatMessageModel,MessageStatusModel,ParentModel,ParentStudentModel,RoomModel,PaymentModel,EducationCenterModel,CenterBranchModel,LeadModel,LeadSourceModel,TelegramSettingsModel,TelegramBotModel,TelegramChatModel,TelegramMessageModel,TelegramTemplateModel,TelegramBroadcastModel,AutoNotificationConfigModel,AutoNotificationLogModel,SmsLogModel,SmsTemplateModel,CenterApplicationModel,AuditLogModel,TeacherAttendanceLocationModel,TeacherAttendanceModel,ExpenseModel],
              sync: { alter: !isProd },
              synchronize: !isProd,
              logging: isProd ? false : console.log,
@@ -185,6 +188,8 @@ import { TeacherAttendanceModel } from './modules/teacher-attendance/model/teach
     CacheModule,
     AiModule,
     TeacherAttendanceModule,
+    ExpenseModule,
+    ReportsModule,
   ],
   controllers: [
   ],

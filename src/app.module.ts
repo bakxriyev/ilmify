@@ -93,6 +93,16 @@ import { TeacherAttendanceModel } from './modules/teacher-attendance/model/teach
 import { ExpenseModule } from './modules/expenses/expense.module';
 import { ExpenseModel } from './modules/expenses/entities/expense.entity';
 import { ReportsModule } from './modules/reports/reports.module';
+import { ReceiptModule } from './modules/receipt/receipt.module';
+import { ReceiptModel } from './modules/receipt/entities/receipt.entity';
+import { ReceiptTemplateModel } from './modules/receipt/entities/receipt-template.entity';
+import { PrinterModule } from './modules/printer/printer.module';
+import { PrinterModel } from './modules/printer/entities/printer.entity';
+import { AcademySettingsModule } from './modules/academy-settings/academy-settings.module';
+import { AcademySettingModel } from './modules/academy-settings/entities/academy-setting.entity';
+import { PrinterAgentModule } from './modules/printer-agent/printer-agent.module';
+import { PrinterAgentModel } from './modules/printer-agent/entities/printer-agent.entity';
+import { PrinterJobModel } from './modules/printer-agent/entities/printer-job.entity';
 
 @Module({
   imports: [
@@ -119,7 +129,7 @@ import { ReportsModule } from './modules/reports/reports.module';
              username: config.get<string>('databaseConfig.user'),
              password: config.get<string>('databaseConfig.password'),
              database: config.get<string>('databaseConfig.dbname'),
-              models: [TariffModel, TeacherModel,LevelModel,AdminModel,UserDeviceModel,GroupLessonModel,RedoIncorrectTaskModel,StudentModel,GroupModel,GroupStudentModel,AttendanceModel,UnitModel,ExerciseModel,TaskModel,StudentAnswerModel,ExerciseResultModel,VocabModel,VocabAnswerModel,VocabResultModel,UnitResultModel,StudentCoinsModel,TeacherCoinLogModel,TaskCoinLogModel,ChatRoomModel,ChatMessageModel,MessageStatusModel,ParentModel,ParentStudentModel,RoomModel,PaymentModel,EducationCenterModel,CenterBranchModel,LeadModel,LeadSourceModel,TelegramSettingsModel,TelegramBotModel,TelegramChatModel,TelegramMessageModel,TelegramTemplateModel,TelegramBroadcastModel,AutoNotificationConfigModel,AutoNotificationLogModel,SmsLogModel,SmsTemplateModel,CenterApplicationModel,AuditLogModel,TeacherAttendanceLocationModel,TeacherAttendanceModel,ExpenseModel],
+              models: [TariffModel, TeacherModel,LevelModel,AdminModel,UserDeviceModel,GroupLessonModel,RedoIncorrectTaskModel,StudentModel,GroupModel,GroupStudentModel,AttendanceModel,UnitModel,ExerciseModel,TaskModel,StudentAnswerModel,ExerciseResultModel,VocabModel,VocabAnswerModel,VocabResultModel,UnitResultModel,StudentCoinsModel,TeacherCoinLogModel,TaskCoinLogModel,ChatRoomModel,ChatMessageModel,MessageStatusModel,ParentModel,ParentStudentModel,RoomModel,PaymentModel,EducationCenterModel,CenterBranchModel,LeadModel,LeadSourceModel,TelegramSettingsModel,TelegramBotModel,TelegramChatModel,TelegramMessageModel,TelegramTemplateModel,TelegramBroadcastModel,AutoNotificationConfigModel,AutoNotificationLogModel,SmsLogModel,SmsTemplateModel,CenterApplicationModel,AuditLogModel,TeacherAttendanceLocationModel,TeacherAttendanceModel,ExpenseModel,ReceiptModel,ReceiptTemplateModel,PrinterModel,AcademySettingModel,PrinterAgentModel,PrinterJobModel],
              sync: { alter: !isProd },
              synchronize: !isProd,
              logging: isProd ? false : console.log,
@@ -190,6 +200,10 @@ import { ReportsModule } from './modules/reports/reports.module';
     TeacherAttendanceModule,
     ExpenseModule,
     ReportsModule,
+    ReceiptModule,
+    PrinterModule,
+    AcademySettingsModule,
+    PrinterAgentModule,
   ],
   controllers: [
   ],

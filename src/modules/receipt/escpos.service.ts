@@ -22,6 +22,7 @@ export interface ReceiptData {
   adminName: string;
   studentName: string;
   studentPhone: string;
+  studentPassword?: string;
   groupName: string;
   paidMonths: string[];
   paymentType: string;

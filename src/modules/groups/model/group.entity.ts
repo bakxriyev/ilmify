@@ -58,6 +58,9 @@ export class GroupModel extends Model {
   @Column({ type: DataType.STRING, allowNull: true })
   weekdays: string;
 
+  @Column({ type: DataType.DATEONLY, allowNull: true })
+  closed_at: string;
+
   // ✅ Timestamp columns (explicit definition is optional, but recommended)
   @CreatedAt
   @Column({ type: DataType.DATE, allowNull: false, defaultValue: DataType.NOW })

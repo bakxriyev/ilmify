@@ -310,6 +310,27 @@ async create(@Body() createGroupDto: CreateGroupDto, @Req() req?: any) {
     await this.groupService.removeStudentFromGroup(groupId, studentId);
   }
 
+  @Patch(':id/close')
+  @ApiOperation({
+    summary: 'Guruhni yopish',
+    description: 'Guruhni yopish va barcha studentlarni guruhdan chiqarish',
+  })
+  @ApiParam({ name: 'id', type: Number, description: 'Guruh ID' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { closed_date: { type: 'string', format: 'date', example: '2026-03-15' } },
+    },
+  })
+  @ApiResponse({ status: 200, description: 'Guruh yopildi' })
+  @ApiResponse({ status: 404, description: 'Guruh topilmadi' })
+  async closeGroup(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('closed_date') closed_date: string,
+  ) {
+    return this.groupService.closeGroup(id, closed_date);
+  }
+
 
   @Get(':id/lessons')
   @ApiOperation({

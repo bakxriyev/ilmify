@@ -9,6 +9,7 @@ import { PrinterService } from '../printer/printer.service';
 import { PaymentModel, PaymentStatus } from '../payments/entities/payment.entity';
 import { StudentModel } from '../students/model/student.entity';
 import { GroupModel } from '../groups/model/group.entity';
+import { EducationCenterModel } from '../education-centers/entities/education-center.entity';
 import { AdminModel } from '../admin/model/admin.entity';
 import { AcademySettingModel } from '../academy-settings/entities/academy-setting.entity';
 
@@ -52,7 +53,7 @@ export class ReceiptService {
   async print(dto: PrintReceiptDto, center_id: number, admin_id?: number, client_ip?: string): Promise<ReceiptModel> {
     const payment = await this.paymentModel.findByPk(dto.payment_id, {
       include: [
-        { model: StudentModel, attributes: ['id', 'first_name', 'last_name', 'phone_number'] },
+        { model: StudentModel, attributes: ['id', 'first_name', 'last_name', 'phone_number', 'password'] },
         { model: GroupModel, attributes: ['id', 'name'] },
       ],
     });
@@ -63,6 +64,7 @@ export class ReceiptService {
     if (!student) throw new NotFoundException('Student topilmadi');
 
     const academy = await this.academyModel.findOne({ where: { center_id } });
+    const center = await EducationCenterModel.findByPk(center_id, { attributes: ['id', 'name', 'logo'] });
     const admins = await AdminModel.findAll({ where: { center_id } });
     const admin = admin_id ? admins.find(a => a.id === admin_id) : admins[0];
     const adminName = admin ? `${(admin as any).first_name || ''} ${(admin as any).last_name || ''}`.trim() || 'Admin' : 'Admin';
@@ -93,11 +95,12 @@ export class ReceiptService {
     }
 
     const settings: any = academy || {};
+    const centerLogo = center?.logo ? `${process.env.API_URL || 'https://api.ilmify-edu.uz'}/uploads/centers/${center.logo}` : undefined;
 
     // Build receipt data
     const receiptData: ReceiptData = {
-      academyName: settings.academy_name || 'Academy',
-      logo: settings.logo || undefined,
+      academyName: settings.academy_name || center?.name || 'Academy',
+      logo: centerLogo || settings.logo || undefined,
       address: settings.address || undefined,
       phones: [settings.phone1, settings.phone2, settings.phone3].filter(Boolean),
       website: settings.website || undefined,
@@ -114,6 +117,7 @@ export class ReceiptService {
       adminName,
       studentName: `${student.first_name} ${student.last_name}`.trim(),
       studentPhone: student.phone_number || '',
+      studentPassword: (student as any).password || '',
       groupName: group?.name || '',
       paidMonths,
       paymentType: payment.payment_type || 'Naqt',
@@ -270,7 +274,13 @@ export class ReceiptService {
     const offset = (page - 1) * limit;
     const { rows, count } = await this.receiptModel.findAndCountAll({
       where: { center_id },
-      include: [{ model: PaymentModel }],
+      include: [{
+        model: PaymentModel,
+        include: [
+          { model: StudentModel, attributes: ['id', 'first_name', 'last_name', 'phone_number'] },
+          { model: GroupModel, attributes: ['id', 'name'] },
+        ],
+      }],
       order: [['created_at', 'DESC']],
       offset,
       limit,

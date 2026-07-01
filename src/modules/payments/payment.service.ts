@@ -428,9 +428,20 @@ export class PaymentService {
     const monthEnd = new Date(targetYear, targetMonth, 0, 23, 59, 59);
 
     const group = await this.groupModel.findByPk(groupId, {
-      attributes: ['id', 'name', 'monthly_price'],
+      attributes: ['id', 'name', 'monthly_price', 'closed_at'],
     });
     const monthlyPrice = Number(group?.monthly_price) || 0;
+    const groupClosedAt = group?.closed_at;
+
+    // Agar guruh yopilgan bo'lsa va target oy yopilgan oydan keyin bo'lsa, bo'sh qaytaramiz
+    if (groupClosedAt) {
+      const closeDate = new Date(groupClosedAt);
+      const closeMonthStart = new Date(closeDate.getFullYear(), closeDate.getMonth(), 1);
+      const requestedMonthStart = new Date(targetYear, targetMonth - 1, 1);
+      if (requestedMonthStart > closeMonthStart) {
+        return [];
+      }
+    }
 
     // Shu oyda guruhda faol bo'lgan studentlarni olish
     const isCurrentMonth = targetMonth === now.getMonth() + 1 && targetYear === now.getFullYear();
@@ -452,12 +463,18 @@ export class PaymentService {
       where: groupStudentWhere,
     });
 
-    // Build student join_date map
+    // Build student join_date map and left_date map
     const joinDateMap = new Map<number, Date>();
+    const leftDateMap = new Map<number, Date>();
     for (const gs of groupStudents) {
       const sid = Number(gs.student_id);
       if (!joinDateMap.has(sid) || (gs.joined_date && (!joinDateMap.get(sid) || new Date(gs.joined_date) < joinDateMap.get(sid)!))) {
         joinDateMap.set(sid, new Date(gs.joined_date));
+      }
+      if (gs.left_date) {
+        if (!leftDateMap.has(sid) || new Date(gs.left_date) > leftDateMap.get(sid)!) {
+          leftDateMap.set(sid, new Date(gs.left_date));
+        }
       }
     }
 
@@ -481,22 +498,39 @@ export class PaymentService {
 
     const overdueDays = Math.max(0, Math.floor((now.getTime() - monthStart.getTime()) / (1000 * 60 * 60 * 24)));
 
-    const studentsNeedingProration = students.filter(s => {
+    const studentsNeedingJoinProration = students.filter(s => {
       if (totalLessonsInMonth === 0) return false;
       const joinDate = joinDateMap.get(Number(s.id));
       if (!joinDate) return false;
       return Date.UTC(joinDate.getFullYear(), joinDate.getMonth(), joinDate.getDate()) > Date.UTC(targetYear, targetMonth - 1, 1);
     });
     const remainingLessonsMap = new Map<number, number>();
-    if (studentsNeedingProration.length > 0) {
-      const results: any[] = [];
-      for (const s of studentsNeedingProration) {
+    if (studentsNeedingJoinProration.length > 0) {
+      for (const s of studentsNeedingJoinProration) {
         const joinDate = joinDateMap.get(Number(s.id))!;
         const key = Number(s.id);
         const count = await this.groupLessonModel.count({
           where: { group_id: groupId, date: { [Op.gte]: joinDate, [Op.lt]: monthEnd } },
         });
         remainingLessonsMap.set(key, count);
+      }
+    }
+
+    const studentsNeedingLeftProration = students.filter(s => {
+      if (totalLessonsInMonth === 0) return false;
+      const leftDate = leftDateMap.get(Number(s.id));
+      if (!leftDate) return false;
+      return Date.UTC(leftDate.getFullYear(), leftDate.getMonth(), leftDate.getDate()) < monthEnd.getTime();
+    });
+    const leftRemainingLessonsMap = new Map<number, number>();
+    if (studentsNeedingLeftProration.length > 0) {
+      for (const s of studentsNeedingLeftProration) {
+        const leftDate = leftDateMap.get(Number(s.id))!;
+        const key = Number(s.id);
+        const count = await this.groupLessonModel.count({
+          where: { group_id: groupId, date: { [Op.gte]: monthStart, [Op.lt]: leftDate } },
+        });
+        leftRemainingLessonsMap.set(key, count);
       }
     }
 
@@ -515,6 +549,14 @@ export class PaymentService {
             effectivePrice = Math.round(pricePerLesson * remainingLessons);
           } else {
             effectivePrice = 0;
+          }
+        }
+        const leftDate = leftDateMap.get(Number(s.id));
+        if (leftDate && Date.UTC(leftDate.getFullYear(), leftDate.getMonth(), leftDate.getDate()) < monthEnd.getTime()) {
+          const remainingLessons = leftRemainingLessonsMap.get(Number(s.id));
+          if (remainingLessons !== undefined) {
+            const pricePerLesson = monthlyPrice / totalLessonsInMonth;
+            effectivePrice = Math.min(effectivePrice, Math.round(pricePerLesson * remainingLessons));
           }
         }
       }
@@ -537,6 +579,7 @@ export class PaymentService {
         debt,
         overdue_days: status === PaymentStatus.PAID ? 0 : overdueDays,
         joined_date: joinDateMap.get(Number(s.id))?.toISOString().split('T')[0] || null,
+        left_date: leftDateMap.get(Number(s.id))?.toISOString().split('T')[0] || null,
       };
     });
 
@@ -1019,6 +1062,16 @@ export class PaymentService {
             });
             if (remainingLessons > 0) {
               effectivePrice = Math.round((monthlyPrice / totalLessons) * remainingLessons);
+            } else {
+              effectivePrice = 0;
+            }
+          }
+          if (leftDate && Date.UTC(leftDate.getFullYear(), leftDate.getMonth(), leftDate.getDate()) < monthEnd.getTime()) {
+            const remainingLessons = await this.groupLessonModel.count({
+              where: { group_id: groupId, date: { [Op.gte]: monthStart, [Op.lt]: leftDate } },
+            });
+            if (remainingLessons > 0) {
+              effectivePrice = Math.min(effectivePrice, Math.round((monthlyPrice / totalLessons) * remainingLessons));
             } else {
               effectivePrice = 0;
             }

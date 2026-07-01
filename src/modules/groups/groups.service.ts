@@ -378,6 +378,29 @@ async create(createGroupDto: CreateGroupDto, center_id?: number): Promise<GroupM
     await StudentModel.update({ group_id: null }, { where: { id: studentId } });
   }
 
+  async closeGroup(id: number, closedDate: string): Promise<any> {
+    const group = await this.groupModel.findByPk(id);
+    if (!group) throw new NotFoundException('Guruh topilmadi');
+
+    const existingGroup = group.toJSON() as any;
+    if (existingGroup.closed_at) {
+      throw new ConflictException('Guruh allaqachon yopilgan');
+    }
+
+    await group.update({ closed_at: closedDate } as any);
+
+    const activeStudents = await this.groupStudentModel.findAll({
+      where: { group_id: id, left_date: null },
+    });
+
+    for (const gs of activeStudents) {
+      await gs.update({ left_date: new Date(closedDate) });
+      await StudentModel.update({ group_id: null }, { where: { id: gs.student_id } });
+    }
+
+    return this.findOne(id);
+  }
+
   private buildInclude(include?: string) {
     const defaultIncludes = [
       { model: TeacherModel, as: 'mainTeacher' },

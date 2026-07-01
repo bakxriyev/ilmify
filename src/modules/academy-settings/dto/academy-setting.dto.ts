@@ -20,4 +20,6 @@ export class UpdateAcademySettingDto {
   receipt_footer?: string;
   receipt_note?: string;
   receipt_thank_you_text?: string;
+  receipt_width?: number;
+  receipt_font_size?: number;
 }

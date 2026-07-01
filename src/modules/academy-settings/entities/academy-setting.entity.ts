@@ -71,6 +71,12 @@ export class AcademySettingModel extends Model {
   @Column({ type: DataType.STRING(200), allowNull: true })
   receipt_thank_you_text: string;
 
+  @Column({ type: DataType.INTEGER, defaultValue: 320 })
+  receipt_width: number;
+
+  @Column({ type: DataType.INTEGER, defaultValue: 13 })
+  receipt_font_size: number;
+
   @CreatedAt
   @Column({ type: DataType.DATE })
   created_at: Date;

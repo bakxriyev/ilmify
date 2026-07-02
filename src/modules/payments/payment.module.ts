@@ -13,10 +13,11 @@ import { ParentModel } from '../parents/entities/parent.entity';
 import { NotificationModule } from '../notification/notification.module';
 import { EducationCenterModel } from '../education-centers/entities/education-center.entity';
 import { TelegramChatModel } from '../telegram-bot/entities/telegram-chat.entity';
+import { ReceiptModel } from '../receipt/entities/receipt.entity';
 
 @Module({
   imports: [
-    SequelizeModule.forFeature([PaymentModel, StudentModel, GroupModel, GroupStudentModel, GroupLessonModel, ParentStudentModel, ParentModel, EducationCenterModel, TelegramChatModel]),
+    SequelizeModule.forFeature([PaymentModel, StudentModel, GroupModel, GroupStudentModel, GroupLessonModel, ParentStudentModel, ParentModel, EducationCenterModel, TelegramChatModel, ReceiptModel]),
     NotificationModule,
   ],
   controllers: [PaymentController],

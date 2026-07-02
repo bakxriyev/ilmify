@@ -16,6 +16,7 @@ import { AuditService } from '../audit/audit.service';
 import { CacheService } from '../../services/cache.service';
 import { TelegramChatModel } from '../telegram-bot/entities/telegram-chat.entity';
 import { EducationCenterModel } from '../education-centers/entities/education-center.entity';
+import { ReceiptModel } from '../receipt/entities/receipt.entity';
 import axios from 'axios';
 
 const monthNames = ['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'];
@@ -34,6 +35,7 @@ export class PaymentService {
     @InjectModel(ParentModel) private parentModel: typeof ParentModel,
     @InjectModel(TelegramChatModel) private telegramChatModel: typeof TelegramChatModel,
     @InjectModel(EducationCenterModel) private centerModel: typeof EducationCenterModel,
+    @InjectModel(ReceiptModel) private receiptModel: typeof ReceiptModel,
     private notificationService: NotificationService,
     private auditService: AuditService,
     private cacheService: CacheService,
@@ -720,6 +722,13 @@ export class PaymentService {
       } catch (err) {
         this.logger.error(`Failed to update center balance: ${(err as any).message}`);
       }
+    }
+
+    // Delete associated receipts first
+    try {
+      await this.receiptModel.destroy({ where: { payment_id: id } });
+    } catch (err) {
+      this.logger.error(`Failed to delete receipts for payment ${id}: ${(err as any).message}`);
     }
 
     await payment.destroy();

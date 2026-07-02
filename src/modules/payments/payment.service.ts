@@ -67,6 +67,8 @@ export class PaymentService {
       student_id: dto.student_id,
       group_id: dto.group_id,
       amount: dto.amount,
+      cash_amount: dto.payment_type === 'yarim_naqt_yarim_karta' ? (dto.cash_amount || 0) : null,
+      card_amount: dto.payment_type === 'yarim_naqt_yarim_karta' ? (dto.card_amount || 0) : null,
       month: dto.month,
       year: dto.year,
       status: dto.status || PaymentStatus.PAID,
@@ -611,6 +613,15 @@ export class PaymentService {
     const newStatus = dto.status || oldStatus;
     const newAmount = dto.amount !== undefined ? Number(dto.amount) : oldAmount;
 
+    // Split payment handling
+    if (dto.payment_type === 'yarim_naqt_yarim_karta') {
+      (dto as any).cash_amount = dto.cash_amount || 0;
+      (dto as any).card_amount = dto.card_amount || 0;
+    } else if (dto.payment_type && dto.payment_type !== 'yarim_naqt_yarim_karta') {
+      (dto as any).cash_amount = null;
+      (dto as any).card_amount = null;
+    }
+
     // Update center balance
     if (payment.center_id) {
       try {
@@ -759,6 +770,75 @@ export class PaymentService {
     const partialCount = await this.paymentModel.count({ where: { ...where, status: PaymentStatus.PARTIAL } });
     const totalAmount = await this.paymentModel.sum('amount', { where: { ...where, status: PaymentStatus.PAID } });
     return { total: totalPayments, paid: paidCount, unpaid: unpaidCount, partial: partialCount, total_amount: totalAmount || 0 };
+  }
+
+  async getTodayStats(center_id?: number) {
+    const today = new Date().toISOString().split('T')[0];
+    const where: any = { paid_at: today, status: { [Op.in]: [PaymentStatus.PAID, PaymentStatus.PARTIAL] } };
+    if (center_id) where.center_id = center_id;
+
+    const payments = await this.paymentModel.findAll({ where, raw: true });
+
+    let totalAmount = 0;
+    let totalCash = 0;
+    let totalCard = 0;
+    let splitCount = 0;
+    let splitCashAmount = 0;
+    let splitCardAmount = 0;
+    let naqtCount = 0;
+    let naqtAmount = 0;
+    let kartaCount = 0;
+    let kartaAmount = 0;
+    let clickCount = 0;
+    let otherCount = 0;
+    let count = 0;
+
+    for (const p of payments as any[]) {
+      const amount = Number(p.amount) || 0;
+      totalAmount += amount;
+      count++;
+
+      if (p.payment_type === 'yarim_naqt_yarim_karta') {
+        splitCount++;
+        const cashPart = Number(p.cash_amount) || 0;
+        const cardPart = Number(p.card_amount) || 0;
+        splitCashAmount += cashPart;
+        splitCardAmount += cardPart;
+        totalCash += cashPart;
+        totalCard += cardPart;
+      } else if (p.payment_type === 'naqt') {
+        naqtCount++;
+        naqtAmount += amount;
+        totalCash += amount;
+      } else if (p.payment_type === 'karta') {
+        kartaCount++;
+        kartaAmount += amount;
+        totalCard += amount;
+      } else if (p.payment_type === 'click') {
+        clickCount++;
+        totalCash += amount;
+      } else {
+        otherCount++;
+        totalCash += amount;
+      }
+    }
+
+    return {
+      date: today,
+      total_count: count,
+      total_amount: totalAmount,
+      total_cash: totalCash,
+      total_card: totalCard,
+      split_count: splitCount,
+      split_cash_amount: splitCashAmount,
+      split_card_amount: splitCardAmount,
+      naqt_count: naqtCount,
+      naqt_amount: naqtAmount,
+      karta_count: kartaCount,
+      karta_amount: kartaAmount,
+      click_count: clickCount,
+      other_count: otherCount,
+    };
   }
 
   async autoGenerateMonthlyPayments() {
@@ -934,7 +1014,7 @@ export class PaymentService {
 
     const paymentTypeLabel = (type: string | null | undefined) => {
       if (!type) return '-';
-      const map: any = { click: 'Click', naqt: 'Naqt', karta: 'Karta' };
+      const map: any = { click: 'Click', naqt: 'Naqt', karta: 'Karta', yarim_naqt_yarim_karta: 'Yarim naqt/karta' };
       return map[type] || type;
     };
 

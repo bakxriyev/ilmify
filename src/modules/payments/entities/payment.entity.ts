@@ -32,6 +32,12 @@ export class PaymentModel extends Model {
   @Column({ type: DataType.DECIMAL(10, 2), allowNull: false })
   amount: number;
 
+  @Column({ type: DataType.DECIMAL(10, 2), allowNull: true })
+  cash_amount: number;
+
+  @Column({ type: DataType.DECIMAL(10, 2), allowNull: true })
+  card_amount: number;
+
   @Column({ type: DataType.INTEGER, allowNull: false })
   month: number;
 

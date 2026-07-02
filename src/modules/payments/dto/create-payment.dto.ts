@@ -16,8 +16,14 @@ export class CreatePaymentDto {
   @ApiProperty({ example: 2026 })
   year: number;
 
-  @ApiProperty({ required: false, example: 'naqt', description: 'To\'lov turi: click, naqt, karta yoki boshqa matn' })
+  @ApiProperty({ required: false, example: 'naqt', description: 'To\'lov turi: click, naqt, karta, yarim_naqt_yarim_karta yoki boshqa matn' })
   payment_type?: string;
+
+  @ApiProperty({ required: false, example: 50000, description: 'Naqt qismi (yarim_naqt_yarim_karta uchun)' })
+  cash_amount?: number;
+
+  @ApiProperty({ required: false, example: 150000, description: 'Karta qismi (yarim_naqt_yarim_karta uchun)' })
+  card_amount?: number;
 
   @ApiProperty({ required: false, example: 'To\'lov qilindi' })
   note?: string;

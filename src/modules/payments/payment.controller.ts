@@ -57,6 +57,12 @@ export class PaymentController {
     return this.service.getStats(req?.center_id);
   }
 
+  @Get('today-stats')
+  @ApiOperation({ summary: "Bugungi to'lov statistikasi (naqt, karta, yarim-naqt-yarim-karta)" })
+  getTodayStats(@Req() req?: any) {
+    return this.service.getTodayStats(req?.center_id);
+  }
+
   @Get('auto-generate')
   @ApiOperation({ summary: 'Oylik to\'lovlarni avtomatik yaratish' })
   autoGenerate() {

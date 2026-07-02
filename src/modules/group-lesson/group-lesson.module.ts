@@ -6,9 +6,10 @@ import { GroupLessonService } from './group-lesson.service';
 import { GroupLessonController } from './group-lesson.controller';
 import { UnitModel } from '../units/model/unit.entity';
 import { RoomModel } from '../rooms/entities/room.entity';
+import { AttendanceModel } from '../attendence/model/attendence.entity';
 
 @Module({
-  imports: [SequelizeModule.forFeature([GroupModel, GroupLessonModel, UnitModel, RoomModel])],
+  imports: [SequelizeModule.forFeature([GroupModel, GroupLessonModel, UnitModel, RoomModel, AttendanceModel])],
   providers: [GroupLessonService],
   controllers: [GroupLessonController],
   exports: [GroupLessonService],

@@ -8,6 +8,7 @@ import { GroupLessonModel } from './entities/group-lesson.entity';
 import { GroupModel } from '../groups/model/group.entity';
 import { UnitModel } from '../units/model';
 import { RoomModel } from '../rooms/entities/room.entity';
+import { AttendanceModel } from '../attendence/model/attendence.entity';
 
 @Injectable()
 export class GroupLessonService {
@@ -20,6 +21,9 @@ export class GroupLessonService {
 
     @InjectModel(UnitModel)
     private readonly unitModel: typeof UnitModel,
+
+    @InjectModel(AttendanceModel)
+    private readonly attendanceModel: typeof AttendanceModel,
   ) {}
 
   // GROUP lessons + units + room
@@ -178,6 +182,9 @@ export class GroupLessonService {
     const lesson = await this.lessonModel.findByPk(lessonId);
     if (!lesson) throw new NotFoundException('Lesson topilmadi');
 
+    // Delete associated attendances first
+    await this.attendanceModel.destroy({ where: { lesson_id: lessonId } });
+
     await lesson.destroy();
     return { message: 'Lesson o\'chirildi' };
   }
@@ -185,6 +192,13 @@ export class GroupLessonService {
   async removeAllByGroup(groupId: number) {
     const group = await this.groupModel.findByPk(groupId);
     if (!group) throw new NotFoundException('Group topilmadi');
+
+    // Delete attendances for all lessons in this group
+    const lessons = await this.lessonModel.findAll({ where: { group_id: groupId }, attributes: ['id'] });
+    const lessonIds = lessons.map(l => l.id);
+    if (lessonIds.length > 0) {
+      await this.attendanceModel.destroy({ where: { lesson_id: lessonIds } });
+    }
 
     const deleted = await this.lessonModel.destroy({
       where: { group_id: groupId },
